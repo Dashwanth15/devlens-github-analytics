@@ -2,11 +2,12 @@ import { useState, useCallback, useRef } from "react";
 import { analyzeResumeFile, analyzeResumeText } from "../api/resumeApi";
 import { extractUsername } from "../utils/github";
 
-// ─── Status badge helpers ─────────────────────────────────────────────────────
+// ── Status badge helpers ─────────────────────────────────────────────────────
 const STATUS_META = {
-  verified:  { label: "Verified",  color: "#10b981", bg: "rgba(16,185,129,0.12)", icon: "✓" },
-  limited:   { label: "Verified",  color: "#10b981", bg: "rgba(16,185,129,0.12)", icon: "✓" }, // legacy: treat as verified
-  not_found: { label: "Not Found", color: "#ef4444", bg: "rgba(239,68,68,0.12)",  icon: "✗" },
+  verified:    { label: "Verified",              color: "#10b981", bg: "rgba(16,185,129,0.12)",  icon: "✓" },
+  limited:     { label: "Verified",              color: "#10b981", bg: "rgba(16,185,129,0.12)",  icon: "✓" }, // legacy
+  not_found:   { label: "Not Found",             color: "#ef4444", bg: "rgba(239,68,68,0.12)",   icon: "✗" },
+  non_github:  { label: "Not GitHub Verifiable", color: "#6366f1", bg: "rgba(99,102,241,0.12)",  icon: "⊘" },
 };
 
 function SkillBadge({ item }) {
@@ -125,8 +126,9 @@ export default function Resume() {
   };
 
   // Treat legacy 'limited' results as verified
-  const verified   = result?.verification_report?.filter((r) => r.status === "verified" || r.status === "limited") || [];
-  const not_found  = result?.verification_report?.filter((r) => r.status === "not_found") || [];
+  const verified      = result?.verification_report?.filter((r) => r.status === "verified" || r.status === "limited") || [];
+  const not_found     = result?.verification_report?.filter((r) => r.status === "not_found") || [];
+  const nonVerifiable = result?.non_verifiable_skills || [];
 
   return (
     <div className="page-content">
@@ -250,8 +252,13 @@ export default function Resume() {
                 💡 How it works
               </div>
               <div>1. AI extracts claimed skills from your resume</div>
-              <div>2. Each skill is matched against GitHub repo languages, names, and descriptions</div>
-              <div>3. A confidence score is assigned per skill</div>
+              <div>2. Each skill is matched against GitHub languages, repo names, and descriptions</div>
+              <div>3. Results are split into 3 categories:</div>
+              <div style={{ marginTop: "var(--s1)", paddingLeft: "var(--s3)" }}>
+                <div><span style={{ color: "#10b981", fontWeight: 700 }}>✓ Verified</span> — proven in GitHub repos</div>
+                <div><span style={{ color: "#6366f1", fontWeight: 700 }}>⊘ Not GitHub Verifiable</span> — real skills (AWS, JWT, AJAX…) that GitHub can't surface</div>
+                <div><span style={{ color: "#ef4444", fontWeight: 700 }}>✗ Not Found</span> — claimed but no GitHub evidence</div>
+              </div>
             </div>
           </div>
         </div>
@@ -295,8 +302,9 @@ export default function Resume() {
                   </div>
                   <div style={{ display: "flex", gap: "var(--s4)", flexWrap: "wrap" }}>
                     {[
-                      { label: "Verified",   count: verified.length,  color: "#10b981" },
-                      { label: "Not Found",  count: not_found.length, color: "#ef4444" },
+                      { label: "Verified",          count: verified.length,      color: "#10b981" },
+                      { label: "Not Found",          count: not_found.length,     color: "#ef4444" },
+                      { label: "Not GitHub Verifiable", count: nonVerifiable.length, color: "#6366f1" },
                     ].map(({ label, count, color }) => (
                       <div key={label}>
                         <div style={{ fontSize: "1.4rem", fontWeight: 800, color }}>{count}</div>
@@ -330,6 +338,29 @@ export default function Resume() {
                 ))}
               </div>
             </div>
+
+            {/* Non-verifiable skills — real skills but not detectable via GitHub */}
+            {nonVerifiable.length > 0 && (
+              <div className="card" style={{
+                background: "rgba(99,102,241,0.04)", border: "1px solid rgba(99,102,241,0.2)" }}>
+                <div className="card-header">
+                  <h3 className="card-title" style={{ color: "#818cf8" }}>⊘ Not GitHub Verifiable</h3>
+                </div>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "var(--s3)", lineHeight: 1.6 }}>
+                  These are <strong style={{ color: "var(--text-secondary)" }}>legitimate skills</strong> that cannot be verified through GitHub repositories — they are protocols, cloud platforms, auth mechanisms, or CS concepts that don't appear as code languages. Recruiters should verify them through interviews or certifications.
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--s2)" }}>
+                  {nonVerifiable.map((skill, i) => (
+                    <span key={i} style={{
+                      padding: "var(--s1) var(--s3)", borderRadius: 99,
+                      background: "rgba(99,102,241,0.1)", color: "#818cf8",
+                      fontSize: "0.8rem", fontWeight: 600,
+                      border: "1px solid rgba(99,102,241,0.2)",
+                    }}>⊘ {skill}</span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Missing evidence */}
             {result.missing_evidence?.length > 0 && (

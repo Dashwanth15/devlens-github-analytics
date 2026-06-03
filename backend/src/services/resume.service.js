@@ -423,11 +423,13 @@ const analyzeResume = async (username, fileBuffer, mimetype, filename) => {
   ].filter(Boolean);
 
   // ── Filter: remove tools that GitHub cannot verify ──────────────────────────
-  // DevOps/cloud/infra tools don't appear as GitHub languages — they'd always
-  // show 0% and pollute the score. We exclude them from verification entirely.
-  // They are still returned in the response under 'extracted_technologies'.
+  // These are real and valid skills, but GitHub repos don't surface them as
+  // programming languages. We separate them out so recruiters see:
+  //   ✓ Verified  — proven by GitHub code
+  //   ⊘ Skipped   — real skill but not GitHub-verifiable (protocols, cloud, auth, etc.)
+  //   ✗ Not Found — claimed but no GitHub evidence found
   const NON_VERIFIABLE_TOOLS = new Set([
-    // Version control (all repos use these — not meaningful to verify)
+    // Version control
     "git", "github", "gitlab", "bitbucket", "svn",
     // Cloud providers & services
     "aws", "amazon web services", "azure", "gcp", "google cloud",
@@ -436,31 +438,49 @@ const analyzeResume = async (username, fileBuffer, mimetype, filename) => {
     // DevOps & containers
     "docker", "kubernetes", "k8s", "helm", "terraform", "ansible",
     "jenkins", "github actions", "ci/cd", "cicd", "circleci", "travis",
-    // Databases — GitHub detects languages, NOT databases used inside code.
-    // MySQL inside a Python/JS project won't show in GitHub language stats.
+    // Databases — GitHub shows language, NOT what DB is used inside code
     "mongodb", "mongo", "postgresql", "postgres", "mysql", "sqlite",
     "sql", "nosql", "redis", "cassandra", "dynamodb", "firebase", "supabase",
     "elasticsearch", "oracle", "mariadb", "neo4j", "influxdb",
-    // API/Protocol terms
+    // Protocols, API patterns & authentication — not GitHub languages
     "rest", "rest apis", "restful", "graphql", "soap", "grpc", "websocket",
-    "api", "microservices", "oauth", "jwt",
-    // Package managers & build tools (not detectable)
+    "api", "microservices", "oauth", "jwt", "ajax", "http", "https",
+    "json", "xml", "yaml", "csv",
+    // Auth & security concepts
+    "jwt authentication", "token based authentication", "session management",
+    "ssl", "tls", "cors", "csrf", "xss", "authentication", "authorization",
+    "encryption", "hashing", "bcrypt", "oauth2",
+    // CS fundamentals — concepts, not code detectable by GitHub
+    "data structures", "algorithms", "oop", "object oriented programming",
+    "object oriented", "design patterns", "solid principles", "solid",
+    "mvc", "mvvm", "clean architecture", "tdd", "bdd",
+    "problem solving", "data structures and algorithms",
+    // Package managers & build tools
     "npm", "yarn", "pip", "maven", "gradle", "webpack", "vite", "babel",
     // Project management
     "jira", "confluence", "trello", "notion", "slack", "agile", "scrum",
-    // OS/networking (not relevant)
+    // OS/networking
     "linux", "unix", "bash", "shell", "powershell", "nginx", "apache",
   ]);
 
   const normForFilter = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, " ").trim();
 
-  const allClaimed = allExtracted.filter(
-    (skill) => !NON_VERIFIABLE_TOOLS.has(normForFilter(skill))
-  );
+  /**
+   * A skill is non-verifiable if:
+   * 1. Its full normalized name is in the set (exact match), OR
+   * 2. ANY significant word (length > 2) within it is in the set
+   *    e.g. "JWT Authentication" → words ["jwt", "authentication"] → "jwt" matches → skipped
+   *    e.g. "REST API" → words ["rest", "api"] → "rest" matches → skipped
+   */
+  const isNonVerifiable = (skill) => {
+    const norm = normForFilter(skill);
+    if (NON_VERIFIABLE_TOOLS.has(norm)) return true;
+    const words = norm.split(/\s+/).filter((w) => w.length > 2);
+    return words.some((word) => NON_VERIFIABLE_TOOLS.has(word));
+  };
 
-  const filteredOutTools = allExtracted.filter(
-    (skill) => NON_VERIFIABLE_TOOLS.has(normForFilter(skill))
-  );
+  const allClaimed = allExtracted.filter((skill) => !isNonVerifiable(skill));
+  const filteredOutTools = allExtracted.filter((skill) => isNonVerifiable(skill));
 
   if (filteredOutTools.length > 0) {
     console.log(`⏭️  Skipping ${filteredOutTools.length} non-verifiable tools: ${filteredOutTools.join(", ")}`);
@@ -556,11 +576,15 @@ const analyzeResume = async (username, fileBuffer, mimetype, filename) => {
     skill_confidence_score: skillConfidenceScore,
     verification_report: verificationReport,
     missing_evidence: missingEvidence,
+    // Skills that are real and valid but cannot be verified via GitHub
+    // (protocols, cloud services, auth, CS concepts, etc.)
+    non_verifiable_skills: filteredOutTools,
     summary: {
       total_claimed: allClaimed.length,
       verified: verified.length,
       limited: limited.length,
       not_found: notFound.length,
+      non_verifiable: filteredOutTools.length,
     },
   };
 };
