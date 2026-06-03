@@ -833,109 +833,407 @@ img { display: block; }
 /* Hide print report on screen */
 .print-report { display: none; }
 
-/* Hide screen-only UI during print */
+/* Hide screen-only UI and reset layout during print */
 @media print {
-  /* Reset page */
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #fff !important; color: #111 !important; font-family: 'Inter', sans-serif; font-size: 11pt; }
+  /* 1. Global Reset & Page Margins */
+  @page {
+    size: A4 portrait;
+    margin: 1.6cm 2cm;
+  }
+  
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 
-  /* Hide screen UI */
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff !important;
+    color: #18181B !important;
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+
+  /* 2. Hide Screen-Only Elements */
   .no-print,
   .sidebar,
   .topbar,
   .tabs,
   .btn,
-  nav { display: none !important; }
-
-  /* Show print report */
-  .print-report { display: block !important; }
-
-  /* Page breaks */
-  .print-section { page-break-after: always; padding: 32pt 40pt; }
-  .print-section:last-of-type { page-break-after: avoid; }
-
-  /* ── Cover ── */
-  .print-cover {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 90vh; text-align: center; background: #09090B; color: #FAFAFA;
-    border-radius: 0;
+  nav {
+    display: none !important;
   }
-  .print-logo { font-size: 28pt; font-weight: 900; color: #A78BFA; margin-bottom: 24pt; letter-spacing: -0.02em; }
-  .print-name { font-size: 32pt; font-weight: 800; color: #FAFAFA; margin: 0 0 8pt; letter-spacing: -0.03em; }
-  .print-handle { font-size: 14pt; color: #A78BFA; margin-bottom: 16pt; font-family: 'JetBrains Mono', monospace; }
-  .print-bio { font-size: 11pt; color: #A1A1AA; max-width: 500pt; line-height: 1.7; margin: 0 0 24pt; }
-  .print-cover-meta { display: flex; flex-wrap: wrap; gap: 16pt; justify-content: center; font-size: 10pt; color: #A1A1AA; margin-bottom: 24pt; }
-  .print-date { font-size: 9pt; color: #52525B; }
 
-  /* ── Section headers ── */
-  .print-section-title {
-    font-size: 16pt; font-weight: 800; color: #18181B;
-    border-bottom: 2pt solid #7C3AED;
-    padding-bottom: 6pt; margin: 0 0 20pt;
+  /* 3. Reset Layout Wrappers (Remove flex layouts and margins) */
+  .app-shell,
+  .main-content,
+  .page-content {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* 4. Print Report Container */
+  .print-report {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #18181B !important;
+  }
+
+  /* 5. Print Section Layout */
+  .print-section {
+    display: block !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    padding: 24pt 0;
+    border-bottom: 1px solid #E4E4E7;
+  }
+  
+  .print-section:last-of-type {
+    border-bottom: none;
+  }
+
+  /* 6. Cover Page Styling (Clean, Light Theme) */
+  .print-cover {
+    display: block !important;
+    text-align: center;
+    padding: 140pt 20pt 40pt 20pt !important;
+    page-break-after: always;
+    break-after: page;
+    border-bottom: none;
+  }
+
+  .print-logo {
+    font-size: 28pt;
+    font-weight: 800;
+    color: #7C3AED !important;
+    margin-bottom: 16pt;
     letter-spacing: -0.02em;
   }
+
+  .print-name {
+    font-size: 26pt;
+    font-weight: 800;
+    color: #18181B !important;
+    margin: 0 0 6pt 0;
+    letter-spacing: -0.03em;
+  }
+
+  .print-handle {
+    font-size: 13pt;
+    color: #7C3AED !important;
+    margin-bottom: 20pt;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .print-bio {
+    font-size: 11pt;
+    color: #4B5563 !important;
+    max-width: 420pt;
+    margin: 0 auto 24pt auto;
+    line-height: 1.6;
+  }
+
+  .print-cover-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16pt;
+    justify-content: center;
+    font-size: 10pt;
+    color: #4B5563 !important;
+    margin-bottom: 32pt;
+  }
+
+  .print-date {
+    font-size: 9pt;
+    color: #71717A;
+  }
+
+  /* 7. Section Titles & Subtitles */
+  .print-section-title {
+    font-size: 14pt;
+    font-weight: 700;
+    color: #18181B !important;
+    border-bottom: 2pt solid #7C3AED;
+    padding-bottom: 4pt;
+    margin: 0 0 16pt 0;
+    letter-spacing: -0.01em;
+  }
+
   .print-sub-title {
-    font-size: 9pt; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.1em; color: #71717A; margin: 16pt 0 8pt;
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #71717A !important;
+    margin: 14pt 0 8pt 0;
   }
 
-  /* ── Stats row ── */
-  .print-stats-row { display: flex; gap: 12pt; flex-wrap: wrap; margin-bottom: 16pt; }
+  /* 8. Stats Grid (3-column grid layout) */
+  .print-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12pt;
+    margin-bottom: 16pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   .print-stat-box {
-    flex: 1; min-width: 80pt; padding: 10pt 12pt;
-    border: 1pt solid #E4E4E7; border-radius: 6pt;
-    background: #FAFAFA;
+    padding: 8pt 12pt;
+    border: 1px solid #E4E4E7 !important;
+    border-radius: 6pt;
+    background: #FAFAFA !important;
   }
-  .print-stat-label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #71717A; margin-bottom: 4pt; }
-  .print-stat-value { font-size: 18pt; font-weight: 800; color: #18181B; font-family: 'JetBrains Mono', monospace; line-height: 1; }
 
-  /* ── Tables ── */
-  .print-table { width: 100%; border-collapse: collapse; margin-top: 8pt; }
-  .print-th { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; color: #71717A; border-bottom: 1pt solid #E4E4E7; padding: 6pt 8pt; text-align: left; background: #F9F9F9; }
-  .print-td { font-size: 10pt; color: #18181B; border-bottom: 0.5pt solid #F4F4F5; padding: 5pt 8pt; }
-  .print-td-label { font-size: 10pt; color: #71717A; padding: 5pt 0; border-bottom: 0.5pt solid #F4F4F5; width: 40%; }
-  .print-td-value { font-size: 10pt; font-weight: 600; color: #18181B; padding: 5pt 0; border-bottom: 0.5pt solid #F4F4F5; text-align: right; }
+  .print-stat-label {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #71717A !important;
+    margin-bottom: 2pt;
+  }
 
-  /* ── Progress bars ── */
-  .print-bar-row { display: flex; align-items: center; gap: 8pt; margin-bottom: 6pt; }
-  .print-bar-label { width: 100pt; font-size: 9pt; color: #3F3F46; flex-shrink: 0; }
-  .print-bar-track { flex: 1; height: 6pt; background: #F4F4F5; border-radius: 99pt; overflow: hidden; }
-  .print-bar-fill { height: 100%; background: #7C3AED; border-radius: 99pt; }
-  .print-bar-pct { width: 28pt; font-size: 8.5pt; font-family: 'JetBrains Mono', monospace; color: #71717A; text-align: right; flex-shrink: 0; }
+  .print-stat-value {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #18181B !important;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.2;
+  }
 
-  /* ── Benchmark rows ── */
-  .print-bench-row { display: flex; align-items: center; gap: 12pt; padding: 5pt 0; border-bottom: 0.5pt solid #F4F4F5; font-size: 9.5pt; }
-  .print-bench-label { width: 90pt; font-weight: 600; color: #18181B; flex-shrink: 0; }
-  .print-bench-you { color: #7C3AED; font-weight: 700; font-family: 'JetBrains Mono', monospace; flex: 1; }
-  .print-bench-avg { color: #71717A; flex: 1; }
-  .print-bench-top { color: #A78BFA; flex: 1; }
-  .print-bench-badge { font-size: 7.5pt; font-weight: 700; padding: 2pt 7pt; border-radius: 99pt; }
-  .print-badge-green { background: #D1FAE5; color: #065F46; }
-  .print-badge-gray  { background: #F4F4F5; color: #71717A; }
+  /* 9. Tables */
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
 
-  /* ── Score section ── */
-  .print-score-hero { display: flex; align-items: baseline; gap: 8pt; margin-bottom: 16pt; }
-  .print-score-num { font-size: 48pt; font-weight: 900; color: #18181B; font-family: 'JetBrains Mono', monospace; line-height: 1; }
-  .print-score-max { font-size: 16pt; color: #A1A1AA; }
-  .print-score-tier { font-size: 14pt; font-weight: 800; margin-left: 8pt; }
+  .print-th {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #71717A !important;
+    border-bottom: 1px solid #E4E4E7 !important;
+    padding: 6pt 8pt;
+    text-align: left;
+    background: #F9F9F9 !important;
+  }
 
-  /* ── Tier pill track ── */
-  .print-tier-track { display: flex; gap: 6pt; flex-wrap: wrap; margin-top: 16pt; }
-  .print-tier-pill { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 3pt 10pt; border-radius: 99pt; background: #F4F4F5; color: #71717A; border: 0.5pt solid #E4E4E7; }
-  .print-tier-active { background: #EDE9FE; color: #6D28D9; border-color: #A78BFA; }
+  .print-td {
+    font-size: 9.5pt;
+    color: #18181B !important;
+    border-bottom: 1px solid #F4F4F5 !important;
+    padding: 5pt 8pt;
+  }
 
-  /* ── Paragraph ── */
-  .print-para { font-size: 10pt; line-height: 1.75; color: #3F3F46; margin: 8pt 0; }
+  .print-td-label {
+    font-size: 9.5pt;
+    color: #71717A !important;
+    padding: 5pt 0;
+    border-bottom: 1px solid #F4F4F5 !important;
+    width: 40%;
+  }
 
-  /* ── Footer ── */
+  .print-td-value {
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: #18181B !important;
+    padding: 5pt 0;
+    border-bottom: 1px solid #F4F4F5 !important;
+    text-align: right;
+  }
+
+  /* 10. Progress Bars */
+  .print-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8pt;
+    margin-bottom: 6pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-bar-label {
+    width: 120pt;
+    font-size: 9.5pt;
+    color: #3F3F46 !important;
+    flex-shrink: 0;
+  }
+
+  .print-bar-track {
+    flex: 1;
+    height: 6pt;
+    background: #F4F4F5 !important;
+    border-radius: 99pt;
+    overflow: hidden;
+  }
+
+  .print-bar-fill {
+    height: 100%;
+    background: #7C3AED !important;
+    border-radius: 99pt;
+  }
+
+  .print-bar-pct {
+    width: 28pt;
+    font-size: 8.5pt;
+    font-family: 'JetBrains Mono', monospace;
+    color: #71717A !important;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* 11. Benchmark Rows (Structured and aligned columns) */
+  .print-bench-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12pt;
+    padding: 6pt 0;
+    border-bottom: 1px solid #F4F4F5 !important;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-bench-label {
+    width: 100pt;
+    font-weight: 600;
+    color: #18181B !important;
+    flex-shrink: 0;
+  }
+
+  .print-bench-you {
+    color: #7C3AED !important;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    width: 80pt;
+    flex-shrink: 0;
+  }
+
+  .print-bench-avg {
+    color: #71717A !important;
+    width: 80pt;
+    flex-shrink: 0;
+  }
+
+  .print-bench-top {
+    color: #7C3AED !important;
+    width: 90pt;
+    flex-shrink: 0;
+  }
+
+  .print-bench-badge {
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 2pt 8pt;
+    border-radius: 99pt;
+    text-align: center;
+    width: 80pt;
+    flex-shrink: 0;
+  }
+
+  .print-badge-green {
+    background: #D1FAE5 !important;
+    color: #065F46 !important;
+  }
+
+  .print-badge-gray {
+    background: #F4F4F5 !important;
+    color: #71717A !important;
+  }
+
+  /* 12. Score Breakdown Section */
+  .print-score-hero {
+    display: flex;
+    align-items: baseline;
+    gap: 8pt;
+    margin-bottom: 16pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-score-num {
+    font-size: 42pt;
+    font-weight: 800;
+    color: #18181B !important;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+  }
+
+  .print-score-max {
+    font-size: 14pt;
+    color: #71717A !important;
+  }
+
+  .print-score-tier {
+    font-size: 13pt;
+    font-weight: 700;
+    margin-left: 8pt;
+  }
+
+  .print-tier-track {
+    display: flex;
+    gap: 6pt;
+    flex-wrap: wrap;
+    margin-top: 14pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-tier-pill {
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3pt 8pt;
+    border-radius: 99pt;
+    background: #F4F4F5 !important;
+    color: #71717A !important;
+    border: 1px solid #E4E4E7 !important;
+  }
+
+  .print-tier-active {
+    background: #EDE9FE !important;
+    color: #6D28D9 !important;
+    border-color: #A78BFA !important;
+  }
+
+  /* 13. General Paragraphs */
+  .print-para {
+    font-size: 9.5pt;
+    line-height: 1.6;
+    color: #3F3F46 !important;
+    margin: 8pt 0;
+  }
+
+  /* 14. Simple Flow-Based Footer */
   .print-footer {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    display: flex; justify-content: space-between;
-    padding: 8pt 40pt; border-top: 0.5pt solid #E4E4E7;
-    font-size: 7.5pt; color: #A1A1AA; background: #fff;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 12pt;
+    border-top: 1px solid #E4E4E7 !important;
+    font-size: 8pt;
+    color: #71717A !important;
+    margin-top: 24pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
-
-  /* Override dark backgrounds for all cards on screen in print mode */
-  .card, .stat-card { background: #fff !important; border-color: #E4E4E7 !important; box-shadow: none !important; }
 }
 

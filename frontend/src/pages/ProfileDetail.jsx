@@ -422,7 +422,9 @@ export default function ProfileDetail() {
 
       {copied && <div className="alert alert-success fade-in no-print">✓ Link copied!</div>}
 
-      <ProfileCard profile={profile} onRefresh={handleRefresh} onCopyLink={handleCopyLink} loading={refreshing} />
+      <div className="no-print">
+        <ProfileCard profile={profile} onRefresh={handleRefresh} onCopyLink={handleCopyLink} loading={refreshing} />
+      </div>
 
       {/* ── Tabs ── */}
       <div className="tabs no-print" style={{ marginTop: "var(--s4)" }}>
