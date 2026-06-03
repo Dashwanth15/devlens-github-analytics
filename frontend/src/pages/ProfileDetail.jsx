@@ -363,7 +363,6 @@ export default function ProfileDetail() {
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
