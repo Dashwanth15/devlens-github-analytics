@@ -1,6 +1,6 @@
 // App.jsx — DevLens routing: Landing at /, App shell at /dashboard/*
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation, Link } from "react-router-dom";
+import { HashRouter, Routes, Route, useLocation, Link } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Discover from "./pages/Discover";
@@ -97,8 +97,8 @@ function RouterRoot() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <RouterRoot />
-    </BrowserRouter>
+    </HashRouter>
   );
 }

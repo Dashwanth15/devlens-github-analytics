@@ -8,7 +8,7 @@ export default function ProfileCard({ profile, onRefresh, onCopyLink, loading })
   };
 
   const handleCopy = () => {
-    const url = `${window.location.origin}/profile/${profile.username}`;
+    const url = `${window.location.origin}/#/profile/${profile.username}`;
     navigator.clipboard.writeText(url);
     onCopyLink?.();
   };
