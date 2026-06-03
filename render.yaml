@@ -31,6 +31,8 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: CLIENT_URL
+        # Set this to your Render static site URL after deploying the frontend
+        # e.g. https://devlens-github-analytics-app.onrender.com
         sync: false
 
   # --------------------------------------------------
@@ -50,4 +52,5 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://devlens-github-analytics-api.onrender.com
+        # Must include /api suffix — Vite bakes this into the JS bundle at build time
+        value: https://devlens-github-analytics-api.onrender.com/api

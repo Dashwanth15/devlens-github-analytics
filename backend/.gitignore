@@ -1,8 +1,10 @@
 # Dependencies
 node_modules/
 
-# Environment variables - NEVER commit this
+# Environment variables - NEVER commit these
 .env
+.env.*
+!.env.example
 
 # Logs
 logs/

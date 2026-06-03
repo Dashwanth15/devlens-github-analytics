@@ -93,6 +93,16 @@ const SKILL_ALIASES = {
   vuejs: ["vue"],
   reactnative: ["react", "native"],
   expressjs: ["express"],
+  reactjs: ["react"],
+  express: ["expressjs"],
+  html5: ["html"],
+  css3: ["css"],
+  tailwindcss: ["tailwind"],
+  tailwind: ["tailwindcss"],
+  socketio: ["socket", "sockets"],
+  javaswing: ["swing"],
+  recharts: ["chart", "charts", "rechart"],
+  scikitlearn: ["sklearn", "scikit"],
   postgresql: ["postgres", "psql"],
   mongodb: ["mongo"],
   javascript: ["js"],
@@ -126,32 +136,57 @@ const getSearchTerms = (normSkill) => {
 };
 
 /**
- * Word-boundary aware text search.
- * Prevents "java" matching inside "javascript", "node" inside "nodemon", etc.
- * @param {string} text - Normalized (lowercase, no separators) text
+ * Word-boundary aware text search supporting short queries and space mappings.
+ * @param {string} rawText - Original raw text from name/description
  * @param {string} term - Normalized term to search for
  */
-const containsTerm = (text, term) => {
-  if (term.length < 3) return false;
-  // Try exact substring first
-  const idx = text.indexOf(term);
-  if (idx === -1) return false;
-  // Check that it's not surrounded by other letters (word boundary simulation)
-  const before = idx > 0 ? text[idx - 1] : null;
-  const after = idx + term.length < text.length ? text[idx + term.length] : null;
-  const isWordChar = (c) => c && /[a-z0-9]/.test(c);
-  // Allow if bounded: e.g. "react-app" → "reactapp" — "react" is a prefix, fine.
-  // Block if term is a strict substring: "java" inside "javascript" is blocked
-  if (isWordChar(before)) return false; // preceded by letters → not a word start
-  if (isWordChar(after) && after !== undefined) {
-    // Allow prefix matches for compound words like "nodejs" containing "node"
-    // but block "java" inside "javascript" (java+script vs java+something_else)
-    // Strategy: only block if the rest forms a known continuation
-    const suffix = text.slice(idx + term.length);
-    const KNOWN_SUFFIXES_TO_BLOCK = ["script", "query", "fx"];
-    if (KNOWN_SUFFIXES_TO_BLOCK.some((s) => suffix.startsWith(s))) return false;
+const checkTextForTerm = (rawText, term) => {
+  if (!rawText || !term) return false;
+  const lowerText = rawText.toLowerCase();
+  const normTerm = term.toLowerCase();
+
+  // 1. Standalone word match using regex boundaries
+  // This handles single letters and short terms like 'go', 'c', 'js', 'ts' safely!
+  const wordRegex = new RegExp(`\\b${normTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+  if (wordRegex.test(lowerText)) return true;
+
+  // 2. Normalised space-replaced boundary check (e.g. "react.js" -> "react js" -> word match "react")
+  const spaceReplacedText = lowerText.replace(/[\.\-_\s]/g, " ");
+  const spaceReplacedTerm = normTerm.replace(/[\.\-_\s]/g, " ");
+  const words = spaceReplacedText.split(/\s+/).filter(Boolean);
+  
+  // Check exact word matches in space-replaced words
+  if (words.includes(spaceReplacedTerm)) return true;
+  
+  // Check if any word in the text starts with the search term (for compound words like "reactnative" or "nextjs")
+  for (const word of words) {
+    if (word.startsWith(spaceReplacedTerm)) {
+      const suffix = word.slice(spaceReplacedTerm.length);
+      const KNOWN_SUFFIXES_TO_BLOCK = ["script", "query", "fx"];
+      if (!KNOWN_SUFFIXES_TO_BLOCK.some((s) => suffix.startsWith(s))) {
+        return true;
+      }
+    }
   }
-  return true;
+
+  // 3. Compressed fallback matching (handles no-space or custom spelling)
+  const compressedText = lowerText.replace(/[\.\-_\s]/g, "");
+  const compressedTerm = normTerm.replace(/[\.\-_\s]/g, "");
+  if (compressedTerm.length >= 3 && compressedText.includes(compressedTerm)) {
+    const idx = compressedText.indexOf(compressedTerm);
+    const before = idx > 0 ? compressedText[idx - 1] : null;
+    const after = idx + compressedTerm.length < compressedText.length ? compressedText[idx + compressedTerm.length] : null;
+    const isWordChar = (c) => c && /[a-z0-9]/.test(c);
+    if (isWordChar(before)) return false;
+    if (isWordChar(after) && after !== undefined) {
+      const suffix = compressedText.slice(idx + compressedTerm.length);
+      const KNOWN_SUFFIXES_TO_BLOCK = ["script", "query", "fx"];
+      if (KNOWN_SUFFIXES_TO_BLOCK.some((s) => suffix.startsWith(s))) return false;
+    }
+    return true;
+  }
+
+  return false;
 };
 
 /**
@@ -173,8 +208,6 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
   repos.forEach((repo) => {
     const normPrimaryLang = repo.language ? normalize(repo.language) : "";
     const allLangs = repo.allLanguages || []; // populated by enrichReposWithLanguages
-    const normName = normalize(repo.repo_name || "");
-    const normDesc = normalize(repo.description || "");
 
     let repoScore = 0;
     let matched = false;
@@ -202,7 +235,7 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
 
     for (const term of searchTerms) {
       // Word-boundary aware name match
-      if (containsTerm(normName, term)) {
+      if (checkTextForTerm(repo.repo_name, term)) {
         evidence.push(`Mentioned in repo name: "${repo.repo_name}"`);
         repoScore += 15;
         break;
@@ -211,7 +244,7 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
 
     for (const term of searchTerms) {
       // Word-boundary aware description match
-      if (containsTerm(normDesc, term)) {
+      if (checkTextForTerm(repo.description, term)) {
         evidence.push(`Mentioned in description of "${repo.repo_name}"`);
         repoScore += 12;
         break;
@@ -237,7 +270,14 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
   }
 
   // ── 3. Ecosystem inference — framework backed by its parent language ───────
-  const ecosystemLanguages = ECOSYSTEM_MAP[normSkill] || [];
+  let ecosystemLanguages = [];
+  for (const term of searchTerms) {
+    if (ECOSYSTEM_MAP[term] && ECOSYSTEM_MAP[term].length > 0) {
+      ecosystemLanguages = ECOSYSTEM_MAP[term];
+      break;
+    }
+  }
+
   if (ecosystemLanguages.length > 0) {
     let ecosystemRepoCount = 0;
     for (const ecoLang of ecosystemLanguages) {
@@ -251,7 +291,6 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
       // Framework is plausible when its parent language is heavily used.
       // Cap raised to 80 so that 7+ parent-language repos → verified (>=65%).
       // e.g. 9 JS repos: 10 + 9*8 = 82 → capped 80 → "verified"
-      //      3 JS repos: 10 + 3*8 = 34 → "limited"
       const bonus = Math.min(80, 10 + ecosystemRepoCount * 8);
       confidenceScore += bonus;
       const ecoLangName = ecosystemLanguages[0];
@@ -263,7 +302,7 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
     }
   }
 
-  // ── 4. Cap and classify ────────────────────────────────────────────
+  // ── 4. Cap and classify ────────────────----------------------------
   const confidence = Math.min(100, Math.round(confidenceScore));
   const uniqueEvidence = [...new Set(evidence)].slice(0, 3);
 
@@ -362,7 +401,7 @@ const analyzeResume = async (username, fileBuffer, mimetype, filename) => {
     "git", "github", "gitlab", "bitbucket", "svn",
     // Cloud providers & services
     "aws", "amazon web services", "azure", "gcp", "google cloud",
-    "heroku", "vercel", "netlify", "cloudflare", "digitalocean",
+    "heroku", "vercel", "netlify", "cloudflare", "digitalocean", "render",
     "ec2", "s3", "lambda", "rds", "cloudfront", "sqs", "sns", "ecs", "eks",
     // DevOps & containers
     "docker", "kubernetes", "k8s", "helm", "terraform", "ansible",

@@ -152,7 +152,8 @@ npm run dev
 ```bash
 cd frontend
 npm install
-# Create .env with VITE_API_URL=http://localhost:5000
+cp .env.example .env
+# .env already has VITE_API_URL=http://localhost:5000/api for local dev
 npm run dev
 ```
 

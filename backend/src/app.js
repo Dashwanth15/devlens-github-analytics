@@ -54,9 +54,10 @@ app.use(
   })
 );
 
-// Rate Limiting: Max 100 requests per 15 minutes per IP
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+// ── Rate Limiters ─────────────────────────────────────────────
+// Global: 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
@@ -65,7 +66,21 @@ const limiter = rateLimit({
     message: "Too many requests. Please try again in 15 minutes.",
   },
 });
-app.use(limiter);
+
+// AI-heavy routes (resume, jobs, ranking): 10 requests per 15 minutes per IP.
+// These hit the Gemini API and GitHub API — expensive per call.
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "AI feature rate limit reached. Please wait 15 minutes before submitting another request.",
+  },
+});
+
+app.use(globalLimiter);
 
 // ── Body Parsing ──────────────────────────────────────────────
 app.use(express.json({ limit: "2mb" })); // Increased for large job descriptions
@@ -90,10 +105,10 @@ app.get("/api/health", (req, res) => {
 
 // ── API Routes ────────────────────────────────────────────────
 app.use("/api/profiles", profileRoutes);
-app.use("/api/resume",   require("./routes/resume.routes"));
+app.use("/api/resume",   aiLimiter, require("./routes/resume.routes"));
 app.use("/api/career",   require("./routes/career.routes"));
-app.use("/api/jobs",     require("./routes/job.routes"));
-app.use("/api/ranking",  require("./routes/ranking.routes"));
+app.use("/api/jobs",     aiLimiter, require("./routes/job.routes"));
+app.use("/api/ranking",  aiLimiter, require("./routes/ranking.routes"));
 
 // ── 404 Handler (unknown routes) ─────────────────────────────
 app.use((req, res) => {
