@@ -59,7 +59,7 @@ const env = {
   // Gemini AI
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || null,
-    model: "gemini-1.5-flash",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     enabled: !!process.env.GEMINI_API_KEY,
   },
 
