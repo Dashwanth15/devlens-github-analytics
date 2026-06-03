@@ -352,7 +352,11 @@ export default function ProfileDetail() {
     setRefreshing(true);
     try {
       const r = await refreshProfile(username);
-      setData(r.data.profile);
+      // Merge profile and repositories so the state structure matches what getProfileByUsername returns
+      setData({
+        ...r.data.profile,
+        repositories: r.data.repositories,
+      });
     } catch (e) {
       setError(e.response?.data?.message || "Refresh failed.");
     } finally { setRefreshing(false); }
