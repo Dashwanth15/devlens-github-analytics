@@ -1,0 +1,39 @@
+{
+  "name": "github-profile-analyzer-backend",
+  "version": "1.0.0",
+  "description": "Backend API for GitHub Profile Analyzer - analyzes GitHub profiles and stores insights in MySQL",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "db:init": "node src/config/initDb.js"
+  },
+  "keywords": [
+    "github",
+    "api",
+    "analyzer",
+    "nodejs",
+    "express",
+    "mysql"
+  ],
+  "author": "GitHub Profile Analyzer",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^7.1.0",
+    "multer": "^2.1.1",
+    "mysql2": "^3.10.0",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
