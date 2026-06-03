@@ -107,13 +107,31 @@ const getAllProfiles = asyncHandler(async (req, res) => {
 const getProfileByUsername = asyncHandler(async (req, res) => {
   const { username } = req.params;
 
-  const profile = await profileRepository.findByUsernameWithRepos(username);
+  let profile = await profileRepository.findByUsernameWithRepos(username);
 
   if (!profile) {
     return res.status(404).json({
       success: false,
       message: `Profile for '${username}' not found. Use POST /api/profiles/analyze to analyze it first.`,
     });
+  }
+
+  // Auto-refresh profile if the cached data is older than 10 minutes
+  const cacheDurationMs = 10 * 60 * 1000;
+  const isStale = new Date() - new Date(profile.analyzed_at) > cacheDurationMs;
+
+  if (isStale) {
+    try {
+      console.log(`Auto-refreshing stale profile for ${username} (analyzed at ${profile.analyzed_at})...`);
+      const refreshed = await analyzerService.refreshProfile(username);
+      profile = {
+        ...refreshed.profile,
+        repositories: refreshed.repositories,
+      };
+    } catch (err) {
+      console.error(`Auto-refresh failed for ${username}:`, err.message);
+      // Fallback silently to cached profile if GitHub API or DB call fails (ensures resilience)
+    }
   }
 
   return res.status(200).json({
