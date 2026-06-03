@@ -47,6 +47,12 @@ const ECOSYSTEM_MAP = {
   nuxtjs: ["javascript", "typescript"],
   redux: ["javascript", "typescript"],
   graphql: ["javascript", "typescript", "python"],
+  // CSS frameworks — if user has CSS/SCSS or any JS framework, they likely use Tailwind
+  tailwind:    ["css", "scss", "javascript", "typescript", "html"],
+  tailwindcss: ["css", "scss", "javascript", "typescript", "html"],
+  // Real-time / UI libraries
+  socketio: ["javascript", "typescript"],
+  recharts: ["javascript", "typescript"],
   // Python ecosystem
   flask: ["python"],
   django: ["python"],
@@ -56,12 +62,19 @@ const ECOSYSTEM_MAP = {
   pytorch: ["python"],
   tensorflow: ["python"],
   sklearn: ["python"],
+  scikitlearn: ["python"],
   // Java ecosystem
   spring: ["java", "kotlin"],
   springboot: ["java", "kotlin"],
   hibernate: ["java"],
   maven: ["java"],
   gradle: ["java", "kotlin"],
+  // Java standard library / GUI — verified by presence of Java repos
+  javaswing:       ["java"],
+  swing:           ["java"],
+  javacollections: ["java"],
+  collections:     ["java"],
+  junit:           ["java"],
   // DevOps / tools (check description/name)
   docker: ["dockerfile", "yaml", "shell"],
   kubernetes: ["yaml", "shell"],
@@ -99,8 +112,10 @@ const SKILL_ALIASES = {
   css3: ["css"],
   tailwindcss: ["tailwind"],
   tailwind: ["tailwindcss"],
-  socketio: ["socket", "sockets"],
-  javaswing: ["swing"],
+  socketio: ["socket", "socketio", "sockets"],
+  javaswing: ["swing", "javaswing"],
+  swing: ["javaswing"],
+  javacollections: ["collections", "java"],
   recharts: ["chart", "charts", "rechart"],
   scikitlearn: ["sklearn", "scikit"],
   postgresql: ["postgres", "psql"],
@@ -201,8 +216,13 @@ const checkTextForTerm = (rawText, term) => {
 const matchSkillToRepos = (skill, repos, languageDistribution) => {
   const normSkill = normalize(skill);
   const searchTerms = getSearchTerms(normSkill);
-  const evidence = [];
   let confidenceScore = 0;
+
+  // Aggregate counters — we report COUNTS, not individual repo names
+  let primaryLangCount   = 0;
+  let secondaryLangCount = 0;
+  let nameMatchCount     = 0;
+  let descMatchCount     = 0;
 
   // ── 1. Direct repo-level matches ──────────────────────────────────────────
   repos.forEach((repo) => {
@@ -210,23 +230,23 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
     const allLangs = repo.allLanguages || []; // populated by enrichReposWithLanguages
 
     let repoScore = 0;
-    let matched = false;
+    let primaryMatched = false;
 
     for (const term of searchTerms) {
       // Primary language exact match — strongest signal
       if (normPrimaryLang === term) {
-        evidence.push(`Primary language in "${repo.repo_name}"`);
+        primaryLangCount++;
         repoScore += 35;
-        matched = true;
+        primaryMatched = true;
         break;
       }
     }
 
-    if (!matched) {
+    if (!primaryMatched) {
       // Secondary language match — skill used in this repo (not primary)
       for (const term of searchTerms) {
         if (allLangs.includes(term)) {
-          evidence.push(`Used in "${repo.repo_name}" (secondary language)`);
+          secondaryLangCount++;
           repoScore += 20;
           break;
         }
@@ -236,7 +256,7 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
     for (const term of searchTerms) {
       // Word-boundary aware name match
       if (checkTextForTerm(repo.repo_name, term)) {
-        evidence.push(`Mentioned in repo name: "${repo.repo_name}"`);
+        nameMatchCount++;
         repoScore += 15;
         break;
       }
@@ -245,7 +265,7 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
     for (const term of searchTerms) {
       // Word-boundary aware description match
       if (checkTextForTerm(repo.description, term)) {
-        evidence.push(`Mentioned in description of "${repo.repo_name}"`);
+        descMatchCount++;
         repoScore += 12;
         break;
       }
@@ -254,22 +274,36 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
     confidenceScore += repoScore;
   });
 
-  // ── 2. Language distribution bonus — used in many repos ───────────────────
+  // ── 2. Build aggregated evidence strings (counts, not repo names) ──────────
+  const evidence = [];
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  if (primaryLangCount > 0)
+    evidence.push(`Primary language in ${plural(primaryLangCount, "repository")}`);
+  if (secondaryLangCount > 0)
+    evidence.push(`Secondary language in ${plural(secondaryLangCount, "repository")}`);
+  if (nameMatchCount > 0)
+    evidence.push(`Mentioned in ${plural(nameMatchCount, "repository name")}`);
+  if (descMatchCount > 0)
+    evidence.push(`Mentioned in ${plural(descMatchCount, "repository description")}`);
+
+  // ── 3. Language distribution bonus — used in many repos ───────────────────
   for (const term of searchTerms) {
     const langKey = Object.keys(languageDistribution).find(
       (k) => normalize(k) === term
     );
     if (langKey && languageDistribution[langKey] > 0) {
-      const bonus = Math.min(25, languageDistribution[langKey] * 6);
+      const count = languageDistribution[langKey];
+      const bonus = Math.min(25, count * 6);
       confidenceScore += bonus;
       if (!evidence.find((e) => e.includes("distribution"))) {
-        evidence.push(`Used in ${languageDistribution[langKey]} repositories`);
+        evidence.push(`Used in ${plural(count, "repository")}`);
       }
       break;
     }
   }
 
-  // ── 3. Ecosystem inference — framework backed by its parent language ───────
+  // ── 4. Ecosystem inference — framework backed by its parent language ───────
   let ecosystemLanguages = [];
   for (const term of searchTerms) {
     if (ECOSYSTEM_MAP[term] && ECOSYSTEM_MAP[term].length > 0) {
@@ -281,33 +315,29 @@ const matchSkillToRepos = (skill, repos, languageDistribution) => {
   if (ecosystemLanguages.length > 0) {
     let ecosystemRepoCount = 0;
     for (const ecoLang of ecosystemLanguages) {
-      // Exact language match in distribution only
       const langKey = Object.keys(languageDistribution).find(
         (k) => normalize(k) === ecoLang
       );
       if (langKey) ecosystemRepoCount += languageDistribution[langKey] || 0;
     }
     if (ecosystemRepoCount > 0) {
-      // Framework is plausible when its parent language is heavily used.
-      // Cap raised to 80 so that 7+ parent-language repos → verified (>=65%).
-      // e.g. 9 JS repos: 10 + 9*8 = 82 → capped 80 → "verified"
+      // Cap at 80 so 7+ parent-language repos → verified (>=65%)
       const bonus = Math.min(80, 10 + ecosystemRepoCount * 8);
       confidenceScore += bonus;
       const ecoLangName = ecosystemLanguages[0];
-      if (!evidence.find((e) => e.includes("ecosystem"))) {
+      if (!evidence.find((e) => e.toLowerCase().includes("ecosystem"))) {
         evidence.push(
-          `Ecosystem: ${ecosystemRepoCount} repos use ${ecoLangName} (${skill}'s language)`
+          `Ecosystem: ${plural(ecosystemRepoCount, "repo")} use ${ecoLangName} (${skill}'s language)`
         );
       }
     }
   }
 
-  // ── 4. Cap and classify ────────────────----------------------------
+  // ── 5. Cap and classify ────────────────────────────────────────────────────
   const confidence = Math.min(100, Math.round(confidenceScore));
-  const uniqueEvidence = [...new Set(evidence)].slice(0, 3);
+  const uniqueEvidence = [...new Set(evidence)].slice(0, 4); // up to 4 evidence lines
 
-  // Binary classification: evidence exists → verified, none → not_found.
-  // "Limited" is removed — if GitHub can detect any proof of the skill, it's verified.
+  // Binary: any evidence → verified, none → not_found
   const status = confidence > 0 ? "verified" : "not_found";
 
   return { status, confidence, evidence: uniqueEvidence };
