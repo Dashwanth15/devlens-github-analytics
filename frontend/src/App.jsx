@@ -1,6 +1,6 @@
 // App.jsx — DevLens routing: Landing at /, App shell at /dashboard/*
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Link } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Discover from "./pages/Discover";
@@ -41,7 +41,7 @@ function Topbar() {
         <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{meta.title}</span>
       </div>
       <div className="topbar-actions">
-        <a href="/" style={{ color: "var(--text-muted)", fontSize: "0.8rem", textDecoration: "none" }}>← Landing</a>
+        <Link to="/" style={{ color: "var(--text-muted)", fontSize: "0.8rem", textDecoration: "none" }}>← Landing</Link>
         <a href="https://github.com" target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
           GitHub ↗
         </a>
@@ -79,7 +79,7 @@ function AppLayout() {
             <div className="page-content" style={{ textAlign: "center", paddingTop: "var(--s16)" }}>
               <div style={{ fontSize: "3rem", marginBottom: "var(--s4)" }}>404</div>
               <h2 style={{ marginBottom: "var(--s2)", color: "var(--text-secondary)" }}>Page not found</h2>
-              <a href="/dashboard" className="btn btn-primary" style={{ marginTop: "var(--s4)" }}>Go to Dashboard</a>
+              <Link to="/dashboard" className="btn btn-primary" style={{ marginTop: "var(--s4)" }}>Go to Dashboard</Link>
             </div>
           } />
         </Routes>
