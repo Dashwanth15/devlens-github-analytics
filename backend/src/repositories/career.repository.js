@@ -4,10 +4,8 @@
  */
 
 const CareerPrediction = require("../models/CareerPrediction");
+const Profile = require("../models/Profile");
 
-/**
- * Upsert a career prediction for a profile (one prediction per profile)
- */
 const upsertCareerPrediction = async (data) => {
   const filter  = { profile_id: data.profile_id };
   const update  = {
@@ -23,19 +21,26 @@ const upsertCareerPrediction = async (data) => {
     },
   };
   const options = { upsert: true, new: true, setDefaultsOnInsert: true };
-
   const doc = await CareerPrediction.findOneAndUpdate(filter, update, options);
   return doc.toObject();
 };
 
-/**
- * Get career prediction for a profile
- */
 const findByProfileId = async (profileId) => {
   return CareerPrediction.findOne({ profile_id: profileId }).lean();
+};
+
+/** Used by career.controller.js — looks up by username */
+const findByUsername = async (username) => {
+  const profile = await Profile.findOne(
+    { username: username.toLowerCase() },
+    { _id: 1 }
+  ).lean();
+  if (!profile) return null;
+  return CareerPrediction.findOne({ profile_id: profile._id }).lean();
 };
 
 module.exports = {
   upsertCareerPrediction,
   findByProfileId,
+  findByUsername,
 };
