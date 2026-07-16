@@ -1,55 +1,45 @@
 /**
- * profile.repository.js - Database Query Layer (Repository Pattern)
+ * profile.repository.js - MongoDB Query Layer (Repository Pattern)
  *
- * RESPONSIBILITY: All SQL queries live HERE and ONLY here.
- * No SQL in controllers, services, or routes.
+ * RESPONSIBILITY: All database operations live HERE and ONLY here.
+ * No Mongoose queries in controllers, services, or routes.
  *
- * WHY REPOSITORY PATTERN?
- * If you switch from MySQL to PostgreSQL tomorrow,
- * you only change this one file — nothing else.
+ * Migrated from MySQL (mysql2) → MongoDB (Mongoose)
  */
 
-const { pool } = require("../config/db");
+const Profile = require("../models/Profile");
 
 /**
  * Find a profile by GitHub username
- * @param {string} username
- * @returns {Object|null} Profile row or null
  */
 const findByUsername = async (username) => {
-  const [rows] = await pool.query(
-    "SELECT * FROM profiles WHERE username = ? LIMIT 1",
-    [username.toLowerCase()]
-  );
-  return rows[0] || null;
+  return Profile.findOne({ username: username.toLowerCase() }).lean();
 };
 
 /**
- * Get all analyzed profiles - paginated, sorted by most recently analyzed
- * @param {number} page - Page number (1-indexed)
- * @param {number} limit - Records per page
- * @returns {Object} { data, total, page, totalPages }
+ * Get all profiles - paginated, sorted by most recently analyzed
  */
 const findAll = async (page = 1, limit = 10) => {
-  const offset = (page - 1) * limit;
+  const skip = (page - 1) * limit;
 
-  const [rows] = await pool.query(
-    `SELECT 
-      id, username, name, avatar_url, profile_url, location,
-      followers, following, public_repos, total_stars,
-      most_used_language, popularity_score, account_age_days, analyzed_at
-     FROM profiles 
-     ORDER BY analyzed_at DESC 
-     LIMIT ? OFFSET ?`,
-    [limit, offset]
-  );
-
-  const [[{ total }]] = await pool.query(
-    "SELECT COUNT(*) as total FROM profiles"
-  );
+  const [data, total] = await Promise.all([
+    Profile.find(
+      {},
+      {
+        username: 1, name: 1, avatar_url: 1, profile_url: 1, location: 1,
+        followers: 1, following: 1, public_repos: 1, total_stars: 1,
+        most_used_language: 1, popularity_score: 1, account_age_days: 1, analyzed_at: 1,
+      }
+    )
+      .sort({ analyzed_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Profile.countDocuments(),
+  ]);
 
   return {
-    data: rows,
+    data,
     total,
     page,
     totalPages: Math.ceil(total / limit),
@@ -57,157 +47,82 @@ const findAll = async (page = 1, limit = 10) => {
 };
 
 /**
- * Get a full profile with its repositories
- * @param {string} username
- * @returns {Object|null} Profile with repos or null
+ * Get a full profile with its embedded repositories
  */
 const findByUsernameWithRepos = async (username) => {
-  const profile = await findByUsername(username);
-  if (!profile) return null;
-
-  const repos = await getRepositoriesByProfileId(profile.id);
-  return { ...profile, repositories: repos };
+  return Profile.findOne({ username: username.toLowerCase() }).lean();
 };
 
 /**
- * Insert a new profile into the database
- * @param {Object} profileData - Structured profile object
- * @returns {Object} The newly created profile
+ * Upsert (insert or update) a profile and its repositories
  */
-const createProfile = async (profileData) => {
-  const sql = `
-    INSERT INTO profiles (
-      username, name, bio, avatar_url, profile_url,
-      company, location, email, blog,
-      followers, following, public_repos, public_gists,
-      total_stars, total_forks, most_used_language,
-      popularity_score, account_age_days, github_created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+const upsertProfile = async (profileData) => {
+  const filter = { username: profileData.username.toLowerCase() };
+  const update = {
+    $set: {
+      ...profileData,
+      analyzed_at: new Date(),
+    },
+  };
+  const options = { upsert: true, new: true, setDefaultsOnInsert: true };
 
-  const values = [
-    profileData.username.toLowerCase(),
-    profileData.name,
-    profileData.bio,
-    profileData.avatar_url,
-    profileData.profile_url,
-    profileData.company,
-    profileData.location,
-    profileData.email,
-    profileData.blog,
-    profileData.followers,
-    profileData.following,
-    profileData.public_repos,
-    profileData.public_gists,
-    profileData.total_stars,
-    profileData.total_forks,
-    profileData.most_used_language,
-    profileData.popularity_score,
-    profileData.account_age_days,
-    profileData.github_created_at,
-  ];
-
-  const [result] = await pool.query(sql, values);
-
-  // Return the full newly created record
-  return findByUsername(profileData.username);
+  return Profile.findOneAndUpdate(filter, update, options).lean();
 };
 
 /**
- * Bulk insert repositories for a profile
- * Uses multi-row INSERT for efficiency (one query, not N queries)
- * @param {number} profileId - FK reference to profiles.id
- * @param {Array} repos - Array of repo objects
+ * Search profiles by username or name (case-insensitive)
  */
-const createRepositories = async (profileId, repos) => {
-  if (!repos || repos.length === 0) return;
-
-  const sql = `
-    INSERT INTO repositories 
-      (profile_id, repo_name, description, language, stars, forks, watchers, is_fork, repo_url)
-    VALUES ?
-  `;
-
-  // Build multi-row value array for bulk insert
-  const values = repos.map((repo) => [
-    profileId,
-    repo.repo_name,
-    repo.description,
-    repo.language,
-    repo.stars,
-    repo.forks,
-    repo.watchers,
-    repo.is_fork,
-    repo.repo_url,
-  ]);
-
-  await pool.query(sql, [values]);
+const searchProfiles = async (query, limit = 10) => {
+  return Profile.find(
+    {
+      $or: [
+        { username: { $regex: query, $options: "i" } },
+        { name:     { $regex: query, $options: "i" } },
+      ],
+    },
+    {
+      username: 1, name: 1, avatar_url: 1, location: 1,
+      followers: 1, public_repos: 1, most_used_language: 1, overall_score: 1,
+    }
+  )
+    .limit(limit)
+    .lean();
 };
 
 /**
- * Get all repositories for a profile
- * @param {number} profileId
- * @returns {Array} Array of repo rows
+ * Get top profiles by overall score (for discover/leaderboard)
  */
-const getRepositoriesByProfileId = async (profileId) => {
-  const [rows] = await pool.query(
-    "SELECT * FROM repositories WHERE profile_id = ? ORDER BY stars DESC",
-    [profileId]
-  );
-  return rows;
+const getTopProfiles = async (limit = 20) => {
+  return Profile.find(
+    {},
+    {
+      username: 1, name: 1, avatar_url: 1, location: 1,
+      followers: 1, public_repos: 1, most_used_language: 1,
+      overall_score: 1, popularity_score: 1, analyzed_at: 1,
+    }
+  )
+    .sort({ overall_score: -1 })
+    .limit(limit)
+    .lean();
 };
 
 /**
- * Upsert repositories — insert any repos not already in DB (by repo_name + profile_id).
- * Uses INSERT IGNORE so existing rows are safely skipped.
- * Call this to sync new GitHub repos into an existing profile without wiping old data.
- * @param {number} profileId - FK reference to profiles.id
- * @param {Array} repos - Array of repo objects (same shape as createRepositories)
+ * Get repositories for a given profile username
  */
-const upsertRepositories = async (profileId, repos) => {
-  if (!repos || repos.length === 0) return;
-
-  const sql = `
-    INSERT IGNORE INTO repositories 
-      (profile_id, repo_name, description, language, stars, forks, watchers, is_fork, repo_url)
-    VALUES ?
-  `;
-
-  const values = repos.map((repo) => [
-    profileId,
-    repo.repo_name,
-    repo.description,
-    repo.language,
-    repo.stars,
-    repo.forks,
-    repo.watchers,
-    repo.is_fork,
-    repo.repo_url,
-  ]);
-
-  await pool.query(sql, [values]);
-};
-
-/**
- * Delete a profile by username (CASCADE deletes repos too)
- * @param {string} username
- * @returns {boolean} True if deleted, false if not found
- */
-const deleteByUsername = async (username) => {
-  const [result] = await pool.query(
-    "DELETE FROM profiles WHERE username = ?",
-    [username.toLowerCase()]
-  );
-  return result.affectedRows > 0;
+const getRepositoriesByUsername = async (username) => {
+  const profile = await Profile.findOne(
+    { username: username.toLowerCase() },
+    { repositories: 1 }
+  ).lean();
+  return profile ? profile.repositories : [];
 };
 
 module.exports = {
   findByUsername,
   findAll,
   findByUsernameWithRepos,
-  createProfile,
-  createRepositories,
-  upsertRepositories,
-  getRepositoriesByProfileId,
-  deleteByUsername,
+  upsertProfile,
+  searchProfiles,
+  getTopProfiles,
+  getRepositoriesByUsername,
 };
