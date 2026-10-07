@@ -8,7 +8,15 @@
  */
 
 const mongoose = require("mongoose");
+const dns = require("dns");
 const env = require("./env");
+
+// Configure public DNS resolvers to bypass local Windows DNS resolution timeouts
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {
+  // Gracefully continue with default system DNS if setServers restricted
+}
 
 let isConnected = false;
 

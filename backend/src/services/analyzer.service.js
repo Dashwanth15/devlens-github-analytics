@@ -1,6 +1,6 @@
 /**
  * analyzer.service.js - Core Business Logic Layer
- * Migrated from MySQL → MongoDB (Mongoose)
+ * Strictly enforces rolling "Latest 20 Developers" queue.
  */
 
 const githubService = require("./github.service");
@@ -16,20 +16,19 @@ const {
 } = require("../utils/insights");
 
 const analyzeProfile = async (username) => {
-  // Check for existing profile
-  const existingProfile = await profileRepository.findByUsername(username);
-  if (existingProfile) {
-    return {
-      alreadyExists: true,
-      profile: existingProfile,
-      repositories: existingProfile.repositories || [],
-    };
+  if (!username) {
+    throw new Error("Username is required.");
   }
+  const cleanUsername = username.toLowerCase().trim();
 
-  // Fetch from GitHub
+  // Check if profile already exists in DB
+  const existingProfile = await profileRepository.findByUsername(cleanUsername);
+
+  // Fetch fresh profile and repositories from GitHub
+  // If GitHub API fails (e.g. invalid user / 404), this throws and NO profile is saved or updated
   const [githubUser, githubRepos] = await Promise.all([
-    githubService.fetchUserProfile(username),
-    githubService.fetchUserRepositories(username),
+    githubService.fetchUserProfile(cleanUsername),
+    githubService.fetchUserRepositories(cleanUsername),
   ]);
 
   // Compute insights
@@ -44,27 +43,41 @@ const analyzeProfile = async (username) => {
   const languageDistribution = getLanguageDistribution(githubRepos);
 
   // Map repos to our schema shape
-  const mappedRepos = topRepos.map((r) => ({
-    repo_id:      r.id,
-    name:         r.name,
-    full_name:    r.full_name,
-    description:  r.description,
-    html_url:     r.html_url,
-    language:     r.language,
-    stars:        r.stargazers_count || r.stars || 0,
-    forks:        r.forks_count      || r.forks || 0,
-    watchers:     r.watchers_count   || r.watchers || 0,
-    open_issues:  r.open_issues_count || r.open_issues || 0,
-    size:         r.size || 0,
-    is_fork:      r.fork || r.is_fork || false,
-    topics:       r.topics || [],
-    created_at:   r.created_at ? new Date(r.created_at) : null,
-    pushed_at:    r.pushed_at  ? new Date(r.pushed_at)  : null,
-  }));
+  const mappedRepos = topRepos.map((r) => {
+    const canonicalName = r.name || r.repo_name || "";
+    const canonicalUrl = r.html_url || r.repo_url || null;
+    return {
+      id:           r.id || r.repo_id || null,
+      repo_id:      r.id || r.repo_id || null,
+      name:         canonicalName,
+      repo_name:    canonicalName,
+      full_name:    r.full_name || canonicalName,
+      description:  r.description || null,
+      html_url:     canonicalUrl,
+      repo_url:     canonicalUrl,
+      language:     r.language || null,
+      languages:    r.languages || [],
+      stars:        r.stars ?? r.stargazers_count ?? 0,
+      forks:        r.forks ?? r.forks_count ?? 0,
+      watchers:     r.watchers ?? r.watchers_count ?? 0,
+      open_issues:  r.open_issues ?? r.open_issues_count ?? 0,
+      size:         r.size || 0,
+      is_fork:      r.is_fork ?? r.fork ?? false,
+      topics:       Array.isArray(r.topics) ? r.topics : [],
+      default_branch: r.default_branch || "main",
+      created_at:   r.created_at ? new Date(r.created_at) : null,
+      pushed_at:    r.pushed_at  ? new Date(r.pushed_at)  : null,
+    };
+  });
 
-  // Upsert profile (with embedded repositories)
+  const now = new Date();
+
+  // Upsert profile:
+  // - If exists: updates existing record, refreshes stats, updates lastAnalyzedAt to NOW (moves to top of queue)
+  // - If new: inserts record and prunes oldest profile if queue exceeds 20
   const savedProfile = await profileRepository.upsertProfile({
     username:           githubUser.login.toLowerCase(),
+    usernameNormalized: githubUser.login.toLowerCase(),
     name:               githubUser.name        || null,
     bio:                githubUser.bio         || null,
     avatar_url:         githubUser.avatar_url  || null,
@@ -83,11 +96,12 @@ const analyzeProfile = async (username) => {
     account_age_days:   accountAgeDays,
     languages_used:     languageDistribution,
     repositories:       mappedRepos,
-    analyzed_at:        new Date(),
+    lastAnalyzedAt:     now,
+    analyzed_at:        now,
   });
 
   return {
-    alreadyExists: false,
+    alreadyExists: !!existingProfile,
     profile: {
       ...savedProfile,
       language_distribution: languageDistribution,
@@ -97,8 +111,6 @@ const analyzeProfile = async (username) => {
 };
 
 const refreshProfile = async (username) => {
-  // Delete existing then re-analyze
-  await profileRepository.deleteByUsername(username);
   return analyzeProfile(username);
 };
 

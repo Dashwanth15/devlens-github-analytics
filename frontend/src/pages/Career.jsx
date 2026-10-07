@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getCareerPrediction, refreshCareerPrediction } from "../api/careerApi";
+import { getAllProfiles } from "../api/profileApi";
 import { extractUsername } from "../utils/github";
+import GitHubDeveloperInput from "../components/GitHubDeveloperInput";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   Radar, Tooltip, ResponsiveContainer,
@@ -136,11 +138,18 @@ export default function Career() {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [cached, setCached] = useState(false);
+  const [recentProfiles, setRecentProfiles] = useState([]);
 
-  const handleFetch = async (forceRefresh = false) => {
-    const cleanUsername = extractUsername(username);
-    if (!cleanUsername) return setError("Enter a GitHub username.");
-    setUsername(cleanUsername); // Update input field to show the clean username
+  useEffect(() => {
+    getAllProfiles(1, 10)
+      .then((res) => setRecentProfiles(res.data || []))
+      .catch(() => {});
+  }, []);
+
+  const handleFetch = async (targetUsername = username, forceRefresh = false) => {
+    const cleanUsername = extractUsername(targetUsername);
+    if (!cleanUsername) return setError("Enter a GitHub username or profile URL.");
+    setUsername(cleanUsername);
     setLoading(true);
     setError(null);
     try {
@@ -171,33 +180,66 @@ export default function Career() {
       </div>
 
       {/* ── Input bar ─────────────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: "var(--s4)" }}>
-        <div style={{ display: "flex", gap: "var(--s3)", alignItems: "flex-end" }}>
+      <div className="card" style={{ marginBottom: "var(--s4)", padding: "var(--s6)" }}>
+        <div style={{ display: "flex", gap: "var(--s4)", alignItems: "flex-start" }}>
           <div style={{ flex: 1 }}>
-            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600,
-              letterSpacing: "0.08em", display: "block", marginBottom: "var(--s2)" }}>
-              GITHUB USERNAME
-            </label>
-            <input className="input" placeholder="e.g. torvalds"
-              value={username} onChange={(e) => setUsername(e.target.value)}
+            <GitHubDeveloperInput
+              id="career-username-input"
+              label="GitHub Developer"
+              value={username}
+              onChange={(val) => {
+                setUsername(val);
+                setError(null);
+              }}
+              onSelectProfile={(p) => {
+                setUsername(p.username);
+                setError(null);
+                handleFetch(p.username);
+              }}
+              recentProfiles={recentProfiles}
+              placeholder="Enter GitHub username or profile URL (e.g. torvalds)"
+              helperText="Analyze any public GitHub profile — saved profiles are only recent suggestions."
               onKeyDown={(e) => e.key === "Enter" && handleFetch()}
-              style={{ width: "100%", boxSizing: "border-box" }} />
+              onClear={() => {
+                setUsername("");
+                setResult(null);
+              }}
+              disabled={loading}
+              accentColor="#7C3AED"
+            />
           </div>
-          <button onClick={() => handleFetch()} disabled={loading} className="btn btn-primary"
-            style={{ padding: "var(--s3) var(--s6)", whiteSpace: "nowrap" }}>
-            {loading ? "Predicting…" : "Predict Growth"}
-          </button>
-          {result && (
-            <button onClick={() => handleFetch(true)} disabled={loading} className="btn btn-ghost"
-              style={{ whiteSpace: "nowrap" }}>
-              ↺ Refresh
+          <div style={{ display: "flex", gap: "var(--s2)", marginTop: "28px" }}>
+            <button
+              onClick={() => handleFetch()}
+              disabled={loading || !username.trim()}
+              className="btn btn-primary"
+              style={{ padding: "var(--s3) var(--s6)", whiteSpace: "nowrap", height: 44 }}
+            >
+              {loading ? "Predicting…" : "Predict Growth"}
             </button>
-          )}
+            {result && (
+              <button
+                onClick={() => handleFetch(username, true)}
+                disabled={loading}
+                className="btn btn-ghost"
+                style={{ whiteSpace: "nowrap", height: 44 }}
+              >
+                ↺ Refresh
+              </button>
+            )}
+          </div>
         </div>
         {error && (
-          <div style={{ marginTop: "var(--s3)", padding: "var(--s2) var(--s3)",
-            background: "rgba(239,68,68,0.1)", borderRadius: "var(--radius-md)",
-            color: "#ef4444", fontSize: "0.8rem" }}>
+          <div
+            style={{
+              marginTop: "var(--s3)",
+              padding: "var(--s2) var(--s3)",
+              background: "rgba(239,68,68,0.1)",
+              borderRadius: "var(--radius-md)",
+              color: "#ef4444",
+              fontSize: "0.8rem",
+            }}
+          >
             {error}
           </div>
         )}

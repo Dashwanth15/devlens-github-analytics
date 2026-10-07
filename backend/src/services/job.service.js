@@ -19,7 +19,7 @@ const analyzerService = require("./analyzer.service");
 // ─── Skill Normalizer ─────────────────────────────────────────────────────────
 
 const normalize = (str) =>
-  str.toLowerCase().replace(/[.\-_\s]/g, "").replace(/js$/, "");
+  typeof str === "string" ? str.toLowerCase().replace(/[.\-_\s]/g, "").replace(/js$/, "") : "";
 
 /**
  * Check if a skill has evidence in the developer's GitHub profile
@@ -226,7 +226,7 @@ const matchJob = async (username, jobDescription, jobTitle = null) => {
   // ── 8. Persist and return ─────────────────────────────────────────────────
   const saved = await jobRepository.createJobAnalysis({
     profile_id: profile.id,
-    job_title: jobTitle || jobReqs.job_title || null,
+    job_title: jobTitle || jobReqs.role_title || jobReqs.job_title || "Software Engineer",
     job_description: jobDescription.slice(0, 5000),
     required_skills: requiredSkills,
     nice_to_have_skills: niceToHave,
@@ -243,7 +243,7 @@ const matchJob = async (username, jobDescription, jobTitle = null) => {
   return {
     id: saved.id,
     username,
-    job_title: jobTitle || jobReqs.job_title,
+    job_title: jobTitle || jobReqs.role_title || jobReqs.job_title || "Software Engineer",
     match_score: matchScore,
     hiring_readiness: hiringReadiness,
     required_skills: requiredSkills,

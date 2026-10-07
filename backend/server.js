@@ -15,6 +15,10 @@ const startServer = async () => {
     // 1. Connect to MongoDB before accepting traffic
     await connectDB();
 
+    // 1b. Initialize rolling 20-developer profile queue
+    const profileRepository = require("./src/repositories/profile.repository");
+    await profileRepository.initializeProfileQueue();
+
     // 2. Start the HTTP server
     server = app.listen(env.port, () => {
       console.log("\n================================================");

@@ -1,4 +1,8 @@
 /**
+ * githubUtils.js - Centralized GitHub Username & URL Parsing Utilities
+ */
+
+/**
  * Extract canonical GitHub username from raw input string.
  * Handles:
  * - Plain username: "torvalds"
@@ -10,16 +14,16 @@
  * @param {string} input
  * @returns {string} normalized lowercase username
  */
-export const extractUsername = (input) => {
+const extractUsername = (input) => {
   if (!input || typeof input !== "string") return "";
   let cleaned = input.trim();
-  
+
   // Strip query parameters and hash fragments
   cleaned = cleaned.split("?")[0].split("#")[0];
-  
+
   // Strip trailing slashes
   cleaned = cleaned.replace(/\/+$/, "");
-  
+
   // If it's a URL or contains github.com
   if (cleaned.includes("github.com")) {
     const parts = cleaned.split("/");
@@ -28,12 +32,12 @@ export const extractUsername = (input) => {
     const parts = cleaned.split("/");
     cleaned = parts[parts.length - 1] || "";
   }
-  
+
   // Strip leading @
   if (cleaned.startsWith("@")) {
     cleaned = cleaned.slice(1);
   }
-  
+
   return cleaned.trim().toLowerCase();
 };
 
@@ -46,9 +50,15 @@ export const extractUsername = (input) => {
  * @param {string} username
  * @returns {boolean}
  */
-export const isValidGitHubUsername = (username) => {
+const isValidGitHubUsername = (username) => {
   if (!username || typeof username !== "string") return false;
   if (username.length < 1 || username.length > 39) return false;
+  // Alphanumeric and single hyphens, not starting or ending with hyphen
   const validRegex = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
   return validRegex.test(username);
+};
+
+module.exports = {
+  extractUsername,
+  isValidGitHubUsername,
 };

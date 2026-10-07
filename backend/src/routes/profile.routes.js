@@ -21,6 +21,7 @@ const validateUsername = require("../middleware/validateUsername");
 // ── Analysis endpoints ────────────────────────────────────────
 router.post("/analyze", validateUsername, controller.analyzeProfile);
 router.post("/refresh", validateUsername, controller.refreshProfile);
+router.post("/compare", controller.compareProfiles);
 
 // ── Read endpoints ────────────────────────────────────────────
 router.get("/", controller.getAllProfiles);

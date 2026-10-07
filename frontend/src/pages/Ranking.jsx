@@ -3,7 +3,9 @@ import {
   createCampaign, getAllCampaigns, getCampaign,
   deleteCampaign, addCandidate, removeCandidate, rankCampaign,
 } from "../api/rankingApi";
+import { getAllProfiles } from "../api/profileApi";
 import { extractUsername } from "../utils/github";
+import GitHubDeveloperInput from "../components/GitHubDeveloperInput";
 
 const STATUS_META = {
   draft:     { label: "Draft",     color: "#94a3b8", dot: "#94a3b8" },
@@ -141,6 +143,7 @@ export default function Ranking() {
   const [addingUser, setAddingUser] = useState(false);
   const [addError, setAddError] = useState(null);
   const [rankError, setRankError] = useState(null);
+  const [recentProfiles, setRecentProfiles] = useState([]);
 
   const loadCampaigns = async () => {
     try {
@@ -167,6 +170,10 @@ export default function Ranking() {
         setCampaigns([]);
         setLoadingCampaigns(false);
       });
+
+    getAllProfiles(1, 10)
+      .then((res) => setRecentProfiles(res.data || []))
+      .catch(() => {});
   }, []);
 
   const handleDelete = async (id) => {
@@ -176,8 +183,8 @@ export default function Ranking() {
     if (activeCampaign?.id === id) setActiveCampaign(null);
   };
 
-  const handleAddCandidate = async () => {
-    const cleanUsername = extractUsername(newUsername);
+  const handleAddCandidate = async (targetUsername = newUsername) => {
+    const cleanUsername = extractUsername(targetUsername);
     if (!cleanUsername || !activeCampaign) return;
     setAddingUser(true);
     setAddError(null);
@@ -205,7 +212,7 @@ export default function Ranking() {
       setActiveCampaign(res.data);
       await loadCampaigns();
     } catch (err) {
-      setRankError(err.response?.data?.message || "Ranking failed. Check that all candidates have analyzed profiles.");
+      setRankError(err.response?.data?.message || "Ranking failed. Please try again.");
     } finally { setLoadingRank(false); }
   };
 
@@ -353,22 +360,42 @@ export default function Ranking() {
             </div>
 
             {/* Add candidate */}
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Add Candidate</h3>
-              </div>
-              <div style={{ display: "flex", gap: "var(--s3)" }}>
-                <input className="input" placeholder="GitHub username"
-                  value={newUsername} onChange={(e) => setNewUsername(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddCandidate()}
-                  style={{ flex: 1 }} />
-                <button onClick={handleAddCandidate} disabled={addingUser || !newUsername.trim()}
-                  className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>
-                  {addingUser ? "Adding…" : "+ Add"}
+            <div className="card" style={{ padding: "var(--s5)" }}>
+              <div style={{ display: "flex", gap: "var(--s4)", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <GitHubDeveloperInput
+                    id="ranking-candidate-input"
+                    label="Candidate GitHub Profile"
+                    value={newUsername}
+                    onChange={(val) => {
+                      setNewUsername(val);
+                      setAddError(null);
+                    }}
+                    onSelectProfile={(p) => {
+                      setNewUsername(p.username);
+                      setAddError(null);
+                      handleAddCandidate(p.username);
+                    }}
+                    recentProfiles={recentProfiles}
+                    placeholder="Enter GitHub username or profile URL (e.g. torvalds)"
+                    helperText="Analyze any public GitHub profile — saved profiles are only recent suggestions."
+                    onKeyDown={(e) => e.key === "Enter" && handleAddCandidate()}
+                    onClear={() => setNewUsername("")}
+                    disabled={addingUser}
+                    accentColor="#F59E0B"
+                  />
+                </div>
+                <button
+                  onClick={() => handleAddCandidate()}
+                  disabled={addingUser || !newUsername.trim()}
+                  className="btn btn-primary"
+                  style={{ whiteSpace: "nowrap", height: 44, marginTop: "28px", padding: "0 var(--s6)" }}
+                >
+                  {addingUser ? "Adding…" : "+ Add Candidate"}
                 </button>
               </div>
               {addError && (
-                <div style={{ marginTop: "var(--s2)", fontSize: "0.8rem", color: "#ef4444" }}>{addError}</div>
+                <div style={{ marginTop: "var(--s3)", fontSize: "0.8rem", color: "#ef4444" }}>{addError}</div>
               )}
             </div>
 

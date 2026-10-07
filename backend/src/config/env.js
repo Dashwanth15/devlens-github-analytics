@@ -40,6 +40,8 @@ module.exports = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || null,
+    model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
+    enabled: !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()),
   },
   clientUrl: process.env.CLIENT_URL || "",
 };

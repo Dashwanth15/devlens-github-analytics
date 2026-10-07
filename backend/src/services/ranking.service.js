@@ -26,7 +26,7 @@ const rankingRepository = require("../repositories/ranking.repository");
 // ─── Sub-scorers ──────────────────────────────────────────────────────────────
 
 const normalize = (str) =>
-  str.toLowerCase().replace(/[.\-_\s]/g, "").replace(/js$/, "");
+  typeof str === "string" ? str.toLowerCase().replace(/[.\-_\s]/g, "").replace(/js$/, "") : "";
 
 /**
  * Tech fit: % of required skills evidenced in developer's language stack

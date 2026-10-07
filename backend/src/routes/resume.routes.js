@@ -14,6 +14,7 @@ const validateUsername = require("../middleware/validateUsername");
 
 router.post("/analyze",      upload.single("file"), validateUsername, controller.analyzeResume);
 router.post("/analyze-text", validateUsername, controller.analyzeResumeText);
+router.post("/export-pdf",   controller.exportResumePdf);
 router.get("/:username",     validateUsername, controller.getResumeAnalysis);
 router.delete("/:username",  validateUsername, controller.deleteResumeAnalysis);
 

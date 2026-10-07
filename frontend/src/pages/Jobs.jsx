@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { matchJob } from "../api/jobApi";
+import { getAllProfiles } from "../api/profileApi";
 import { extractUsername } from "../utils/github";
+import GitHubDeveloperInput from "../components/GitHubDeveloperInput";
 
 const READINESS_META = {
   exceptional: { label: "Exceptional Match", color: "#10b981", bg: "rgba(16,185,129,0.1)", icon: "⚡" },
@@ -82,6 +84,13 @@ export default function Jobs() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [recentProfiles, setRecentProfiles] = useState([]);
+
+  useEffect(() => {
+    getAllProfiles(1, 10)
+      .then((res) => setRecentProfiles(res.data || []))
+      .catch(() => {});
+  }, []);
 
   const EXAMPLE_JD = `We are looking for a Senior Frontend Engineer to join our team.
 
@@ -99,8 +108,8 @@ Nice to have:
 
   const handleAnalyze = async () => {
     const cleanUsername = extractUsername(username);
-    if (!cleanUsername) return setError("Enter a GitHub username.");
-    setUsername(cleanUsername); // Update input field to show the clean username
+    if (!cleanUsername) return setError("Enter a GitHub username or profile URL.");
+    setUsername(cleanUsername);
     if (!jobDescription.trim() || jobDescription.trim().length < 50)
       return setError("Job description must be at least 50 characters.");
     setLoading(true);
@@ -132,26 +141,41 @@ Nice to have:
       </div>
 
       {/* ── Input section ─────────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: "var(--s4)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--s4)",
-          marginBottom: "var(--s4)" }}>
+      <div className="card" style={{ marginBottom: "var(--s4)", padding: "var(--s6)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "var(--s5)",
+          marginBottom: "var(--s4)", alignItems: "start" }}>
           <div>
-            <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600,
-              letterSpacing: "0.08em", display: "block", marginBottom: "var(--s2)" }}>
-              GITHUB USERNAME
-            </label>
-            <input className="input" placeholder="e.g. torvalds"
-              value={username} onChange={(e) => setUsername(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box" }} />
+            <GitHubDeveloperInput
+              id="job-candidate-input"
+              label="Candidate GitHub Profile"
+              value={username}
+              onChange={(val) => {
+                setUsername(val);
+                setError(null);
+              }}
+              onSelectProfile={(p) => {
+                setUsername(p.username);
+                setError(null);
+              }}
+              recentProfiles={recentProfiles}
+              placeholder="Enter GitHub username or profile URL (e.g. torvalds)"
+              helperText="Analyze any public GitHub profile — saved profiles are only recent suggestions."
+              onClear={() => {
+                setUsername("");
+                setResult(null);
+              }}
+              disabled={loading}
+              accentColor="#3B82F6"
+            />
           </div>
           <div>
-            <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600,
-              letterSpacing: "0.08em", display: "block", marginBottom: "var(--s2)" }}>
-              JOB TITLE (optional)
+            <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 700,
+              letterSpacing: "0.06em", display: "block", marginBottom: "var(--s2)", textTransform: "uppercase" }}>
+              Job Title (optional)
             </label>
             <input className="input" placeholder="e.g. Senior Frontend Engineer"
               value={jobTitle} onChange={(e) => setJobTitle(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box" }} />
+              style={{ width: "100%", height: 44, boxSizing: "border-box" }} />
           </div>
         </div>
 

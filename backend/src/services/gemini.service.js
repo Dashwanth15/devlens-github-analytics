@@ -1,46 +1,53 @@
 /**
- * gemini.service.js - Google Gemini AI Gateway
+ * gemini.service.js - Google Gemini AI Gateway with Robust Deterministic Fallback
  *
- * RESPONSIBILITY: All Gemini API calls route through here.
- * No other service instantiates the Gemini client directly.
- *
- * Why centralized?
- * - Single place to swap AI provider (OpenAI, Anthropic, etc.)
- * - Centralized prompt versioning and error handling
- * - Prevents duplicate client initialization
- * - Easy to add caching, retry logic, or quota tracking later
+ * RESPONSIBILITIES:
+ * 1. AI-assisted resume extraction (with rich deterministic dictionary fallback).
+ * 2. AI-assisted verification synthesis (reasoning, strengths, gaps, recommendations).
+ * 3. Graceful degradation: If Gemini API key is missing or invalid (401), the system
+ *    seamlessly falls back to the deterministic engine without breaking verification.
  */
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const env = require("../config/env");
+const {
+  CANONICAL_KEYS,
+  TECH_REGISTRY,
+  normalizeTechName,
+  getTechCategory,
+  textContainsTech,
+} = require("../utils/technologyTaxonomy");
 
 let genAI = null;
 let model = null;
 
-// Lazy initialization — only create client if API key is present
 const getModel = () => {
-  if (!env.gemini.enabled) {
-    throw new Error("Gemini AI is not configured. Add GEMINI_API_KEY to your .env file.");
+  if (!env.gemini.enabled || !env.gemini.apiKey) {
+    return null;
   }
   if (!model) {
-    genAI = new GoogleGenerativeAI(env.gemini.apiKey);
-    model = genAI.getGenerativeModel({
-      model: env.gemini.model,
-      generationConfig: {
-        responseMimeType: "application/json", // Force JSON-only responses
-        temperature: 0.1,                     // Low temp = deterministic extraction
-      },
-    });
+    try {
+      genAI = new GoogleGenerativeAI(env.gemini.apiKey);
+      model = genAI.getGenerativeModel({
+        model: env.gemini.model || "gemini-1.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+      });
+    } catch (err) {
+      console.warn("⚠️ Failed to initialize GoogleGenerativeAI client:", err.message);
+      return null;
+    }
   }
   return model;
 };
 
 /**
- * Parse JSON from Gemini response text safely
- * Handles cases where the model wraps JSON in markdown code blocks
+ * Safely parse JSON from model response text
  */
 const parseJsonResponse = (text) => {
-  // Strip markdown code fences if present
+  if (!text) return null;
   const cleaned = text
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
@@ -49,233 +56,319 @@ const parseJsonResponse = (text) => {
   try {
     return JSON.parse(cleaned);
   } catch {
-    throw new Error(`Gemini returned invalid JSON: ${text.slice(0, 200)}`);
+    return null;
   }
 };
 
-const COMMON_SKILLS = [
-  "React", "Vue", "Angular", "Node.js", "Express", "Python", "Django", "Flask",
-  "Java", "Spring", "C#", "Go", "Rust", "TypeScript", "JavaScript", "HTML",
-  "CSS", "SQL", "NoSQL", "Ruby", "Rails", "PHP", "Laravel"
-];
+/**
+ * Deterministic Resume Data Extractor (Robust Fallback covering 200+ technologies)
+ * Used when Gemini is not configured, API key is invalid, or quota is exceeded.
+ */
+const extractResumeDataDeterministic = (text) => {
+  const normalizedText = (text || "").toLowerCase();
+  const detectedSkills = [];
+  const detectedTech = [];
 
-const COMMON_TECH = [
-  "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Git", "Jenkins", "CI/CD",
-  "Redis", "PostgreSQL", "MySQL", "MongoDB", "Firebase", "Lambda", "EC2",
-  "S3", "GraphQL", "REST", "Jira"
-];
-
-const generateMockResumeData = (text) => {
-  const normalizedText = text.toLowerCase();
-  
-  // Extract matching skills
-  const skills = COMMON_SKILLS.filter(skill => {
-    const norm = skill.toLowerCase();
-    const escaped = norm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(normalizedText) || normalizedText.includes(norm);
-  });
-  
-  // Extract matching tech
-  const technologies = COMMON_TECH.filter(tech => {
-    const norm = tech.toLowerCase();
-    const escaped = norm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(normalizedText) || normalizedText.includes(norm);
+  // Scan all canonical technologies from our registry
+  CANONICAL_KEYS.forEach((canonical) => {
+    if (textContainsTech(text, canonical)) {
+      const category = getTechCategory(canonical);
+      if (category === "Programming Language" || category === "Framework" || category === "Library" || category === "Runtime") {
+        detectedSkills.push(canonical);
+      } else {
+        detectedTech.push(canonical);
+      }
+    }
   });
 
   // Extract years of experience
-  let experience_years = 3.0;
-  const expMatch = text.match(/(\d+(?:\.\d+)?)\+?\s*years?/i);
+  let experience_years = 2.0;
+  const expMatch = text.match(/(\d+(?:\.\d+)?)\+?\s*years?(?:\s+of)?(?:\s+experience)?/i);
   if (expMatch) {
     experience_years = parseFloat(expMatch[1]);
   }
 
-  // Guess specialization
+  // Determine specializations
   const specializations = [];
-  if (normalizedText.includes("frontend") || normalizedText.includes("react") || normalizedText.includes("vue")) {
-    specializations.push("Frontend");
-  }
-  if (normalizedText.includes("backend") || normalizedText.includes("node") || normalizedText.includes("python")) {
-    specializations.push("Backend");
-  }
-  if (specializations.length === 2) {
-    specializations.push("Full-Stack");
-  }
-  if (normalizedText.includes("devops") || normalizedText.includes("docker") || normalizedText.includes("kubernetes")) {
-    specializations.push("DevOps");
-  }
-  if (specializations.length === 0) {
-    specializations.push("Software Engineer");
-  }
+  if (/frontend|react|vue|angular|css|html/i.test(normalizedText)) specializations.push("Frontend");
+  if (/backend|node|express|flask|django|spring|sql|mongo/i.test(normalizedText)) specializations.push("Backend");
+  if (specializations.includes("Frontend") && specializations.includes("Backend")) specializations.push("Full-Stack");
+  if (/docker|kubernetes|aws|ci\/cd|devops/i.test(normalizedText)) specializations.push("DevOps");
+  if (/machine learning|deep learning|data science|pandas|numpy|pytorch|tensorflow/i.test(normalizedText)) specializations.push("AI & Data Science");
+  if (specializations.length === 0) specializations.push("Software Engineer");
 
-  // Extract some project-like phrases or generate mock projects
+  // Extract project mentions
   const projects = [];
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   for (const line of lines) {
-    if (line.toLowerCase().includes("project") || line.toLowerCase().includes("developed") || line.toLowerCase().includes("built")) {
-      const cleanLine = line.replace(/^[*\-\s\d•]+/, '').trim();
-      if (cleanLine.length > 10 && cleanLine.length < 60) {
-        projects.push(cleanLine);
-      }
+    const cleanLine = line.replace(/^[*\-\s\d•#]+/, "").trim();
+    if (
+      /(platform|system|application|app|service|api|bot|analyzer|dashboard|manager|tool)/i.test(cleanLine) &&
+      cleanLine.length >= 8 &&
+      cleanLine.length <= 60 &&
+      !cleanLine.toLowerCase().startsWith("experience") &&
+      !cleanLine.toLowerCase().startsWith("skills")
+    ) {
+      projects.push(cleanLine);
     }
-    if (projects.length >= 3) break;
+    if (projects.length >= 4) break;
   }
   if (projects.length === 0) {
-    projects.push("E-Commerce Web App", "Task Management API", "Personal Portfolio");
+    projects.push("Full-Stack Application", "REST API Service", "Portfolio Project");
   }
 
   return {
-    skills: skills.length > 0 ? skills : ["JavaScript", "HTML", "CSS"],
-    technologies: technologies.length > 0 ? technologies : ["Git", "MySQL"],
-    projects: projects.slice(0, 3),
+    skills: [...new Set(detectedSkills)],
+    technologies: [...new Set(detectedTech)],
+    projects: [...new Set(projects)].slice(0, 4),
     experience_years,
-    specializations: [...new Set(specializations)]
-  };
-};
-
-const generateMockJobRequirements = (text) => {
-  const normalizedText = text.toLowerCase();
-  
-  // Title extraction: search first few lines for engineer/developer/architect
-  let job_title = "Software Engineer";
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  for (let i = 0; i < Math.min(5, lines.length); i++) {
-    if (/(engineer|developer|architect|programmer|lead|manager)/i.test(lines[i])) {
-      job_title = lines[i];
-      break;
-    }
-  }
-  
-  // Skill extraction
-  const foundSkills = COMMON_SKILLS.filter(skill => {
-    const norm = skill.toLowerCase();
-    const escaped = norm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(normalizedText) || normalizedText.includes(norm);
-  });
-  
-  const foundTech = COMMON_TECH.filter(tech => {
-    const norm = tech.toLowerCase();
-    const escaped = norm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(normalizedText) || normalizedText.includes(norm);
-  });
-
-  // Separate into required vs nice_to_have
-  const required_skills = foundSkills.slice(0, Math.max(3, Math.ceil(foundSkills.length / 2)));
-  const nice_to_have = [
-    ...foundSkills.slice(required_skills.length),
-    ...foundTech
-  ].slice(0, 5);
-
-  // Level
-  let experience_level = "mid";
-  if (normalizedText.includes("senior") || normalizedText.includes("sr.")) experience_level = "senior";
-  else if (normalizedText.includes("lead") || normalizedText.includes("principal")) experience_level = "lead";
-  else if (normalizedText.includes("junior") || normalizedText.includes("jr.") || normalizedText.includes("entry")) experience_level = "junior";
-
-  // Min years
-  let experience_years_min = 2;
-  const expMatch = text.match(/(?:at least|minimum|requried|prefer|require|has)\s*(\d+)\+?\s*years?/i);
-  if (expMatch) {
-    experience_years_min = parseInt(expMatch[1], 10);
-  }
-
-  // Domain
-  let domain = "saas";
-  if (normalizedText.includes("finance") || normalizedText.includes("fintech") || normalizedText.includes("bank")) domain = "fintech";
-  else if (normalizedText.includes("health") || normalizedText.includes("medical")) domain = "healthtech";
-  else if (normalizedText.includes("shop") || normalizedText.includes("commerce") || normalizedText.includes("store")) domain = "ecommerce";
-  else if (normalizedText.includes("game") || normalizedText.includes("play")) domain = "gaming";
-
-  return {
-    job_title,
-    required_skills: required_skills.length > 0 ? required_skills : ["JavaScript", "React"],
-    nice_to_have: nice_to_have.length > 0 ? nice_to_have : ["Docker", "Git"],
-    experience_level,
-    experience_years_min,
-    domain
+    specializations: [...new Set(specializations)],
   };
 };
 
 /**
- * Extract structured data from resume text
- * @param {string} resumeText - Clean text from PDF or paste
- * @returns {Object} { skills, technologies, projects, experience_years, specializations }
+ * Extract structured resume data using Gemini with fallback
+ * @param {string} resumeText
+ * @returns {Object} Structured resume data
  */
 const extractResumeData = async (resumeText) => {
-  if (!env.gemini.enabled) {
-    console.warn("⚠️ Gemini API key not found. Using fallback mock parser.");
-    return generateMockResumeData(resumeText);
-  }
   const aiModel = getModel();
 
-  const prompt = `You are a technical recruiter AI that extracts structured information from resumes.
+  if (aiModel) {
+    try {
+      const prompt = `You are a technical recruiter AI. Extract technical information explicitly stated in this resume text.
+Do NOT hallucinate or assume technologies.
 
-Extract ONLY information explicitly stated in the resume text. Do NOT infer or hallucinate.
-
-Return ONLY valid JSON in this exact shape (no extra keys, no markdown):
+Return ONLY valid JSON in this exact shape:
 {
-  "skills": ["React", "Node.js", "Python"],
-  "technologies": ["AWS", "Docker", "PostgreSQL", "Redis"],
-  "projects": ["E-commerce Platform", "ML Pipeline", "REST API"],
-  "experience_years": 4.5,
-  "specializations": ["Frontend", "Full-Stack", "DevOps"]
+  "skills": ["JavaScript", "HTML", "CSS", "React", "Node.js", "Express", "Python", "Flask"],
+  "technologies": ["MongoDB", "MySQL", "Docker", "AWS", "Git", "JWT", "REST", "Tailwind CSS"],
+  "projects": ["Project Name 1", "Project Name 2"],
+  "experience_years": 3.0,
+  "specializations": ["Full-Stack", "Backend"]
 }
 
 Definitions:
-- skills: programming languages and frameworks explicitly mentioned
-- technologies: tools, platforms, cloud services, databases explicitly mentioned
-- projects: project names or types of projects described
-- experience_years: total years of professional software development experience (number, not string). Use null if not stated.
-- specializations: domain areas the candidate focuses on
+- skills: programming languages, web frameworks, runtimes, and libraries explicitly claimed
+- technologies: databases, cloud providers, devops tools, APIs, and dev utilities explicitly claimed
+- projects: major project titles described
+- experience_years: total years of professional/development experience as a number or null
+- specializations: developer focus areas
 
 Resume text:
 ---
 ${resumeText}
 ---`;
 
-  const result = await aiModel.generateContent(prompt);
-  const text = result.response.text();
-  return parseJsonResponse(text);
+      const result = await aiModel.generateContent(prompt);
+      const text = result.response.text();
+      const parsed = parseJsonResponse(text);
+      if (parsed && Array.isArray(parsed.skills)) {
+        return {
+          skills: (parsed.skills || []).map(normalizeTechName),
+          technologies: (parsed.technologies || []).map(normalizeTechName),
+          projects: parsed.projects || [],
+          experience_years: parsed.experience_years || null,
+          specializations: parsed.specializations || [],
+        };
+      }
+    } catch (err) {
+      console.warn("⚠️ Gemini resume extraction failed (falling back to deterministic parser):", err.message);
+    }
+  }
+
+  return extractResumeDataDeterministic(resumeText);
+};
+
+/**
+ * Synthesize verification explanations, strengths, and gaps using Gemini or deterministic fallback
+ */
+const synthesizeVerification = async ({ username, verificationReport, missingEvidence, inspectedRepos }) => {
+  const verifiedList = verificationReport.filter((r) => r.status === "verified");
+  const partialList = verificationReport.filter((r) => r.status === "partially_verified");
+  const missingList = missingEvidence || [];
+
+  // Deterministic synthesis baseline
+  const baselineStrengths = [];
+  const baselineGaps = [];
+  const baselineRecs = [];
+
+  if (verifiedList.length > 0) {
+    const topSkills = verifiedList.slice(0, 5).map((s) => s.skill).join(", ");
+    baselineStrengths.push(`Strong, repository-verified technical competency in ${topSkills}.`);
+    const manifestVerified = verifiedList.filter((s) => s.evidence.some((e) => e.type === "dependency"));
+    if (manifestVerified.length > 0) {
+      baselineStrengths.push(
+        `Production package dependencies confirmed for ${manifestVerified.map((s) => s.skill).join(", ")}.`
+      );
+    }
+  }
+
+  if (missingList.length > 0) {
+    baselineGaps.push(
+      `No public GitHub evidence found for ${missingList.slice(0, 4).join(", ")}.`
+    );
+    baselineRecs.push(
+      `Publish or link public repositories showcasing your experience with ${missingList.slice(0, 3).join(", ")} to turn these claims into verified credentials.`
+    );
+  }
+
+  if (baselineRecs.length === 0) {
+    baselineRecs.push("Maintain comprehensive README documentation and dependency locks to ensure automated verifiability.");
+  }
+
+  const aiModel = getModel();
+  if (!aiModel) {
+    return {
+      strengths: baselineStrengths,
+      evidence_gaps: baselineGaps,
+      recommendations: baselineRecs,
+    };
+  }
+
+  try {
+    const evidenceSummary = verificationReport.map((r) => ({
+      skill: r.skill,
+      status: r.status,
+      confidence: r.confidence,
+      evidence_count: r.evidence.length,
+      sample_evidence: r.evidence[0]?.detail || "No direct evidence",
+    }));
+
+    const prompt = `You are DevLens Developer Intelligence AI. Review this developer's resume claims and real GitHub repository evidence.
+Strictly adhere to the provided evidence. DO NOT hallucinate technologies, repositories, or accomplishments.
+
+Candidate: ${username}
+Verified Evidence Table:
+${JSON.stringify(evidenceSummary, null, 2)}
+
+Return ONLY valid JSON:
+{
+  "strengths": [
+    "1-2 concise sentences highlighting the strongest verified skills and repository proof"
+  ],
+  "evidence_gaps": [
+    "1-2 concise sentences identifying claimed resume skills that lack public GitHub evidence"
+  ],
+  "recommendations": [
+    "1-2 actionable technical recommendations for the developer to strengthen their GitHub profile"
+  ]
+}`;
+
+    const result = await aiModel.generateContent(prompt);
+    const parsed = parseJsonResponse(result.response.text());
+    if (parsed && Array.isArray(parsed.strengths) && parsed.strengths.length > 0) {
+      return {
+        strengths: parsed.strengths,
+        evidence_gaps: parsed.evidence_gaps || baselineGaps,
+        recommendations: parsed.recommendations || baselineRecs,
+      };
+    }
+  } catch (err) {
+    console.warn("⚠️ Gemini verification synthesis failed (using deterministic synthesis):", err.message);
+  }
+
+  return {
+    strengths: baselineStrengths,
+    evidence_gaps: baselineGaps,
+    recommendations: baselineRecs,
+  };
 };
 
 /**
  * Extract structured requirements from a job description
- * @param {string} jobDescription - Raw job description text
- * @returns {Object} { job_title, required_skills, nice_to_have, experience_level, experience_years_min, domain }
+ * Returns { role_title, experience_level, required_skills, nice_to_have }
  */
 const extractJobRequirements = async (jobDescription) => {
-  if (!env.gemini.enabled) {
-    console.warn("⚠️ Gemini API key not found. Using fallback mock parser.");
-    return generateMockJobRequirements(jobDescription);
+  const text = (jobDescription || "").toLowerCase();
+
+  // Baseline deterministic extraction
+  const detectedSkills = [];
+  for (const [key, meta] of Object.entries(TECH_REGISTRY)) {
+    if (textContainsTech(text, key, meta)) {
+      detectedSkills.push(key);
+    }
   }
+
+  // Partition into required vs nice to have based on keywords/sections
+  const niceToHaveKeywords = ["nice to have", "preferred", "bonus", "plus", "optional", "good to have"];
+  const lowerJd = (jobDescription || "").toLowerCase();
+
+  let niceToHaveSection = "";
+  for (const kw of niceToHaveKeywords) {
+    const idx = lowerJd.indexOf(kw);
+    if (idx !== -1) {
+      niceToHaveSection += " " + lowerJd.slice(idx);
+    }
+  }
+
+  const required_skills = [];
+  const nice_to_have = [];
+
+  for (const skill of detectedSkills) {
+    if (!skill || typeof skill !== "string") continue;
+    const sLower = skill.toLowerCase();
+    if (niceToHaveSection.includes(sLower) && !required_skills.includes(skill)) {
+      nice_to_have.push(skill);
+    } else {
+      required_skills.push(skill);
+    }
+  }
+
+  // Determine experience level
+  let experience_level = "mid";
+  if (/\b(senior|lead|principal|staff|architect|5\+|6\+|7\+|8\+|10\+)\b/i.test(jobDescription)) {
+    experience_level = "senior";
+  } else if (/\b(junior|entry|intern|graduate|0-2|1-2)\b/i.test(jobDescription)) {
+    experience_level = "junior";
+  }
+
+  const fallback = {
+    role_title: "Software Engineer",
+    experience_level,
+    required_skills: required_skills.length > 0 ? required_skills : ["JavaScript", "Python"],
+    nice_to_have: nice_to_have,
+  };
+
   const aiModel = getModel();
+  if (!aiModel) {
+    return fallback;
+  }
 
-  const prompt = `You are a technical hiring manager AI that extracts structured requirements from job descriptions.
+  try {
+    const prompt = `You are a technical recruiter. Extract structured technical requirements from this job description.
 
-Return ONLY valid JSON in this exact shape (no extra keys, no markdown):
+Job Description:
+${jobDescription.slice(0, 3000)}
+
+Return ONLY valid JSON in this exact structure:
 {
-  "job_title": "Senior Frontend Engineer",
-  "required_skills": ["React", "TypeScript", "Node.js"],
-  "nice_to_have": ["Docker", "AWS", "GraphQL"],
-  "experience_level": "senior",
-  "experience_years_min": 4,
-  "domain": "fintech"
-}
+  "role_title": "extracted or inferred job title",
+  "experience_level": "junior | mid | senior | lead",
+  "required_skills": ["Skill1", "Skill2", "Skill3"],
+  "nice_to_have": ["Skill4", "Skill5"]
+}`;
 
-Definitions:
-- required_skills: technologies/skills explicitly stated as required or must-have (ONLY programming languages, frameworks, and tools — not soft skills)
-- nice_to_have: preferred, bonus, or nice-to-have technical skills
-- experience_level: one of exactly [junior, mid, senior, lead, principal] — pick closest match
-- experience_years_min: minimum years of experience mentioned as a number, or null if not stated
-- domain: industry or product domain (e.g., fintech, healthtech, ecommerce, saas, gaming) or null
+    const result = await aiModel.generateContent(prompt);
+    const parsed = parseJsonResponse(result.response.text());
+    if (parsed && Array.isArray(parsed.required_skills) && parsed.required_skills.length > 0) {
+      return {
+        role_title: parsed.role_title || fallback.role_title,
+        experience_level: parsed.experience_level || fallback.experience_level,
+        required_skills: parsed.required_skills,
+        nice_to_have: Array.isArray(parsed.nice_to_have) ? parsed.nice_to_have : fallback.nice_to_have,
+      };
+    }
+  } catch (err) {
+    console.warn("⚠️ Gemini job extraction failed (using deterministic fallback):", err.message);
+  }
 
-Job description:
----
-${jobDescription}
----`;
-
-  const result = await aiModel.generateContent(prompt);
-  const text = result.response.text();
-  return parseJsonResponse(text);
+  return fallback;
 };
 
-module.exports = { extractResumeData, extractJobRequirements };
+module.exports = {
+  extractResumeData,
+  extractResumeDataDeterministic,
+  synthesizeVerification,
+  extractJobRequirements,
+};

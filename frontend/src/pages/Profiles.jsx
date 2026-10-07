@@ -14,7 +14,7 @@ export default function Profiles() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("analyzed_at");
+  const [sortKey, setSortKey] = useState("lastAnalyzedAt");
   const [sortDir, setSortDir] = useState("desc");
   const [deleting, setDeleting] = useState(null);
   const [page, setPage] = useState(1);
@@ -58,6 +58,7 @@ export default function Profiles() {
     try {
       await deleteProfile(username);
       setProfiles((p) => p.filter((x) => x.username !== username));
+      setPagination((prev) => prev ? { ...prev, total: Math.max(0, prev.total - 1) } : null);
     } finally { setDeleting(null); }
   };
 
@@ -78,8 +79,15 @@ export default function Profiles() {
       data = data.filter((p) => p.username.includes(q) || (p.name || "").toLowerCase().includes(q));
     }
     data.sort((a, b) => {
-      const va = a[sortKey] ?? 0;
-      const vb = b[sortKey] ?? 0;
+      let va = a[sortKey];
+      let vb = b[sortKey];
+      if (sortKey === "lastAnalyzedAt" || sortKey === "analyzed_at") {
+        va = new Date(a.lastAnalyzedAt || a.analyzed_at || 0).getTime();
+        vb = new Date(b.lastAnalyzedAt || b.analyzed_at || 0).getTime();
+      } else {
+        va = va ?? 0;
+        vb = vb ?? 0;
+      }
       return sortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
     });
     return data;
@@ -90,8 +98,11 @@ export default function Profiles() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--s6)" }}>
         <div>
           <h1 className="page-title">Saved Profiles</h1>
-          <p className="page-subtitle" style={{ marginBottom: 0 }}>
-            {pagination ? `${pagination.total} developers analyzed` : ""}
+          <p className="page-subtitle" style={{ marginBottom: 2 }}>
+            {pagination ? `${pagination.total} of 20 recent developers` : ""}
+          </p>
+          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
+            Showing the 20 most recently analyzed developers.
           </p>
         </div>
         <Link to="/discover" className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -145,8 +156,8 @@ export default function Profiles() {
                   Followers {renderSortIcon("followers")}
                 </th>
                 <th>Language</th>
-                <th style={{ cursor: "pointer" }} onClick={() => handleSort("analyzed_at")}>
-                  Analyzed {renderSortIcon("analyzed_at")}
+                <th style={{ cursor: "pointer" }} onClick={() => handleSort("lastAnalyzedAt")}>
+                  Analyzed {renderSortIcon("lastAnalyzedAt")}
                 </th>
                 <th></th>
               </tr>
@@ -173,7 +184,7 @@ export default function Profiles() {
                   </td>
                   <td>{p.most_used_language ? <span className="badge badge-gray">{p.most_used_language}</span> : "—"}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                    {new Date(p.analyzed_at).toLocaleDateString()}
+                    {new Date(p.lastAnalyzedAt || p.analyzed_at).toLocaleDateString()}
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: "var(--s2)", justifyContent: "flex-end" }}>

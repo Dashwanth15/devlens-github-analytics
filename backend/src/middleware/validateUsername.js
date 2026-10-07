@@ -1,54 +1,38 @@
 /**
  * validateUsername.js - Input Validation Middleware
- *
- * WHY VALIDATE INPUTS?
- * Never trust user input. Validate before it hits business logic.
- * GitHub usernames have specific rules we can enforce.
- *
- * GitHub username rules:
- * - 1–39 characters
- * - Only alphanumeric + hyphens
- * - Cannot start or end with hyphen
- * - No consecutive hyphens
+ * Normalizes input: handles raw usernames, @handles, and full GitHub URLs.
  */
 
+const { extractUsername, isValidGitHubUsername } = require("../utils/githubUtils");
+
 const validateUsername = (req, res, next) => {
-  // Get username from body (POST) or params (GET/DELETE)
-  const username = req.body?.username || req.params?.username;
+  const rawInput = req.body?.username || req.params?.username || req.query?.username;
 
-  if (!username) {
+  if (!rawInput) {
     return res.status(400).json({
       success: false,
-      message: "GitHub username is required.",
+      message: "GitHub username or profile URL is required.",
     });
   }
 
-  const trimmed = username.trim();
+  const normalized = extractUsername(rawInput);
 
-  // Length check
-  if (trimmed.length < 1 || trimmed.length > 39) {
+  if (!normalized || !isValidGitHubUsername(normalized)) {
     return res.status(400).json({
       success: false,
-      message: "GitHub username must be between 1 and 39 characters.",
+      message: "Invalid GitHub username or URL. Please provide a valid GitHub handle or profile link.",
     });
   }
 
-  // Valid character check (alphanumeric + hyphens)
-  const validUsernameRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/;
-  if (!validUsernameRegex.test(trimmed)) {
-    return res.status(400).json({
-      success: false,
-      message:
-        "Invalid GitHub username. Only letters, numbers, and hyphens allowed. Cannot start or end with a hyphen.",
-    });
-  }
-
-  // Attach cleaned username back to request
+  // Attach cleaned canonical username back to request
   if (req.body) {
-    req.body.username = trimmed;
+    req.body.username = normalized;
   }
   if (req.params) {
-    req.params.username = trimmed;
+    req.params.username = normalized;
+  }
+  if (req.query) {
+    req.query.username = normalized;
   }
 
   next();

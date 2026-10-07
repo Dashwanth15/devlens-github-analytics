@@ -96,20 +96,36 @@ const calculatePopularityScore = (followers, totalStars, totalForks, publicRepos
  * @returns {Array} Top repos sorted by stars descending
  */
 const getTopRepositories = (repos, limit = 5) => {
-  return repos
-    .filter((repo) => !repo.fork) // Only original repos
-    .sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
+  return (repos || [])
+    .filter((repo) => !repo.fork && !repo.is_fork) // Only original repos
+    .sort((a, b) => (b.stargazers_count || b.stars || 0) - (a.stargazers_count || a.stars || 0))
     .slice(0, limit)
-    .map((repo) => ({
-      repo_name: repo.name,
-      description: repo.description || null,
-      language: repo.language || null,
-      stars: repo.stargazers_count || 0,
-      forks: repo.forks_count || 0,
-      watchers: repo.watchers_count || 0,
-      is_fork: repo.fork || false,
-      repo_url: repo.html_url,
-    }));
+    .map((repo) => {
+      const canonicalName = repo.name || repo.repo_name || "";
+      const canonicalUrl = repo.html_url || repo.repo_url || null;
+      return {
+        id: repo.id || repo.repo_id || null,
+        repo_id: repo.id || repo.repo_id || null,
+        name: canonicalName,
+        repo_name: canonicalName,
+        full_name: repo.full_name || (canonicalName ? `${canonicalName}` : null),
+        description: repo.description || null,
+        language: repo.language || null,
+        languages: repo.languages || [],
+        stars: repo.stargazers_count ?? repo.stars ?? 0,
+        forks: repo.forks_count ?? repo.forks ?? 0,
+        watchers: repo.watchers_count ?? repo.watchers ?? 0,
+        open_issues: repo.open_issues_count ?? repo.open_issues ?? 0,
+        size: repo.size || 0,
+        is_fork: repo.fork ?? repo.is_fork ?? false,
+        topics: Array.isArray(repo.topics) ? repo.topics : [],
+        default_branch: repo.default_branch || "main",
+        html_url: canonicalUrl,
+        repo_url: canonicalUrl,
+        created_at: repo.created_at || null,
+        pushed_at: repo.pushed_at || null,
+      };
+    });
 };
 
 /**

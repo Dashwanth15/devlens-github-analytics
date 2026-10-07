@@ -1,7 +1,7 @@
 // Discover.jsx — Search page with step-by-step loading progress
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { analyzeProfile, refreshProfile } from "../api/profileApi";
+import { analyzeProfile, refreshProfile, getAllProfiles } from "../api/profileApi";
 import ProfileCard from "../components/ProfileCard";
 import StatsGrid from "../components/StatsGrid";
 import ScoreBreakdown from "../components/ScoreBreakdown";
@@ -29,6 +29,13 @@ export default function Discover() {
   const [activeStep, setActiveStep] = useState(-1);
   const [activeTab, setActiveTab] = useState("Overview");
   const [copied, setCopied] = useState(false);
+  const [recentProfiles, setRecentProfiles] = useState([]);
+
+  useEffect(() => {
+    getAllProfiles(1, 8)
+      .then((r) => setRecentProfiles(r.data || []))
+      .catch(() => {});
+  }, []);
 
   const runSteps = async (fn) => {
     setLoading(true);
@@ -123,6 +130,41 @@ export default function Discover() {
             }
           </button>
         </form>
+
+        {!result && recentProfiles.length > 0 && (
+          <div style={{ marginTop: "var(--s3)", display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--s2)", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Recent profiles:</span>
+            {recentProfiles.slice(0, 5).map((p) => (
+              <button
+                key={p.username}
+                type="button"
+                onClick={() => {
+                  setUsername(p.username);
+                  runSteps(() => analyzeProfile(p.username));
+                }}
+                disabled={loading}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "999px",
+                  padding: "3px 10px",
+                  fontSize: "0.75rem",
+                  color: "var(--text-secondary)",
+                  fontFamily: "JetBrains Mono, monospace",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                {p.avatar_url && (
+                  <img src={p.avatar_url} alt={p.username} style={{ width: 14, height: 14, borderRadius: "50%" }} />
+                )}
+                @{p.username}
+              </button>
+            ))}
+          </div>
+        )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
 

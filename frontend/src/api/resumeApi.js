@@ -38,3 +38,27 @@ export const deleteResumeAnalysis = async (username) => {
   const { data } = await api.delete(`/resume/${username}`);
   return data;
 };
+
+// Download professional PDF verification report
+// ZERO re-analysis: passes existing completed result object directly and triggers native browser file download
+export const downloadResumePdfReport = async (result, username) => {
+  const response = await api.post(
+    "/resume/export-pdf",
+    { result, username },
+    { responseType: "blob" }
+  );
+
+  const cleanUser = (username || result?.username || "Developer").replace(/[^a-zA-Z0-9_\-]/g, "");
+  const filename = `DevLens_Resume_Verification_${cleanUser}.pdf`;
+
+  const blob = new Blob([response.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+  return true;
+};

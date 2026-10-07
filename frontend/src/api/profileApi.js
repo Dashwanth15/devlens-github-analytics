@@ -36,6 +36,12 @@ export const getProfileByUsername = async (username) => {
   return data;
 };
 
+// Compare any two developers (cached or fresh GitHub)
+export const compareDevelopers = async (username1, username2) => {
+  const { data } = await api.post("/profiles/compare", { username1, username2 });
+  return data;
+};
+
 // Delete a profile
 export const deleteProfile = async (username) => {
   const { data } = await api.delete(`/profiles/${username}`);

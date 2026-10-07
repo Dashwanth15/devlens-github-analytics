@@ -77,4 +77,36 @@ const deleteResumeAnalysis = asyncHandler(async (req, res) => {
   return res.status(200).json({ success: true, message: `Resume analysis for '${username}' deleted.` });
 });
 
-module.exports = { analyzeResume, analyzeResumeText, getResumeAnalysis, deleteResumeAnalysis };
+const resumeReportService = require("../services/resumeReport.service");
+
+// POST /api/resume/export-pdf
+// Generates professional PDF report directly from existing verification result (ZERO external API calls)
+const exportResumePdf = asyncHandler(async (req, res) => {
+  let { result, username } = req.body;
+  if (!result && username) {
+    result = await resumeRepository.findByUsername(username);
+  }
+  if (!result) {
+    return res.status(400).json({
+      success: false,
+      message: "Completed verification result or valid username is required to export PDF report.",
+    });
+  }
+
+  const pdfBuffer = await resumeReportService.generateResumeReportPdf(result);
+  const cleanUser = (result.username || username || "Developer").replace(/[^a-zA-Z0-9_\-]/g, "");
+  const filename = `DevLens_Resume_Verification_${cleanUser}.pdf`;
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Length", pdfBuffer.length);
+  return res.send(pdfBuffer);
+});
+
+module.exports = {
+  analyzeResume,
+  analyzeResumeText,
+  getResumeAnalysis,
+  deleteResumeAnalysis,
+  exportResumePdf,
+};
