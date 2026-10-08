@@ -73,12 +73,6 @@ export default function LandingNavbar() {
 
       {/* CTA */}
       <div className="landing-nav-actions">
-        <button
-          className="landing-nav-link"
-          onClick={() => navigate("/dashboard")}
-        >
-          Sign In
-        </button>
         <motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
